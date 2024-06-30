@@ -1,0 +1,15 @@
+## IDF Component Manager Manifest File
+dependencies:
+  ## Required IDF version
+  idf: ">=5.0"
+  spotify_client:
+    git: https://github.com/fherrera124/spotify_client
+    version: aae719825b871f36f99311d70698e34169b8991a
+  u8g2:
+    git: https://github.com/olikraus/u8g2
+    version: 698b7edd4acb1f7ffd2c0075d0e36ca1191f9035
+  esp32_rotary_encoder:
+    git: https://github.com/fherrera124/esp32_rotary_encoder
+    version: 99ffb2de2f26306722d5221fc55514f8beedbd8f
+  protocol_examples_common:
+    path: ${IDF_PATH}/examples/common_components/protocol_examples_common
