@@ -2,9 +2,6 @@
 dependencies:
   ## Required IDF version
   idf: ">=5.0"
-  spotify_client:
-    git: https://github.com/fherrera124/spotify_client
-    version: aae719825b871f36f99311d70698e34169b8991a
   u8g2_hal_esp_idf:
     git: https://github.com/fherrera124/u8g2_hal_esp_idf
     version: 6a1e0ba7f3de6f2b4cc67226fe4005f56fa624c9

@@ -1,4 +1,30 @@
 {
     "idf.adapterTargetName": "esp32",
-    "idf.flashType": "UART"
+    "idf.flashType": "UART",
+    "files.associations": {
+        "*.COBOL*": "cobol",
+        "*.COB*": "cobol",
+        "*.COBCOPY*": "cobol",
+        "*.COPYBOOK*": "cobol",
+        "*.COPY*": "cobol",
+        "*.PL1*": "pl1",
+        "*.PLI*": "pl1",
+        "*.INC*": "pl1",
+        "*.INCLUDE*": "pl1",
+        "*.JCL*": "jcl",
+        "*.ASM*": "hlasm",
+        "*.ASSEMBLE*": "hlasm",
+        "*.HLASM*": "hlasm",
+        "*.HLA*": "hlasm",
+        "sdkconfig": "c",
+        "display.h": "c",
+        "queue.h": "c",
+        "selection_list.h": "c",
+        "spotify_client.h": "c",
+        "stdlib.h": "c",
+        "string.h": "c",
+        "parse_objects.h": "c",
+        "spotify_client_priv.h": "c"
+    },
+    "idf.portWin": "COM5"
 }
