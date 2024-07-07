@@ -43,10 +43,10 @@ typedef struct {
 } HttpClient_data_t;
 
 typedef enum {
-    PAUSE = 1,
-    PLAY,
-    PREVIOUS,
-    NEXT,
+    PAUSE = DO_PAUSE,
+    PLAY = DO_PLAY,
+    PREVIOUS = DO_PREVIOUS,
+    NEXT = DO_NEXT,
     CHANGE_VOLUME,
     GET_STATE
 } PlayerCommand_t;
@@ -165,16 +165,16 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
         xEventGroupSetBits(event_group, DATA_PROCESSED);
         break;
     case DO_PLAY:
-        player_cmd(PLAY, NULL, NULL);
-        break;
     case DO_PAUSE:
-        player_cmd(PAUSE, NULL, NULL);
-        break;
     case DO_NEXT:
-        player_cmd(NEXT, NULL, NULL);
-        break;
     case DO_PREVIOUS:
-        player_cmd(PREVIOUS, NULL, NULL);
+        if (xSemaphoreTake(http_buf_lock, 0) == pdTRUE) {
+            RELEASE_LOCK(http_buf_lock);
+            player_cmd(event, NULL, NULL);
+        } else {
+            ESP_LOGW(TAG, "http client bussy, ignoring request");
+            return ESP_FAIL;
+        }
         break;
     default:
         ESP_LOGE(TAG, "Unknown event: %d", event);
@@ -455,6 +455,8 @@ static inline esp_err_t http_retries_available(esp_err_t err)
         debug_mem();
         return ESP_OK;
     }
+    esp_http_client_close(http_client.handle);
+    s_retries = 0;
     return ESP_FAIL;
 }
 
