@@ -193,7 +193,7 @@ BaseType_t spotify_wait_event(SpotifyClientEvent_t* event, TickType_t xTicksToWa
 }
 
 // ok
-esp_err_t http_play_context_uri(const char* uri, HttpStatus_Code* status_code)
+esp_err_t spotify_play_context_uri(const char* uri, HttpStatus_Code* status_code)
 {
     esp_err_t       err;
     HttpStatus_Code s_code = 0;

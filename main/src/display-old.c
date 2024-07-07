@@ -185,7 +185,7 @@ static void playlists_page()
 
             ESP_LOGD(TAG, "URI selected: %s", uri->str);
 
-            http_play_context_uri(uri->str);
+            spotify_play_context_uri(uri->str);
             vTaskDelay(50);
             UNBLOCK_PLAYER_TASK;
         }
