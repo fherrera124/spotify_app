@@ -42,6 +42,7 @@ static void setup_display();
 static void display_task(void* arg);
 static void initial_menu_page();
 static void now_playing_page();
+static void on_update_progress(const time_t* new_progress, char* clock, long* bar_width, uint16_t max_bar_width);
 // static void dispatch_command(rotary_encoder_event_t* event);
 
 /* Locally scoped variables --------------------------------------------------*/
@@ -49,7 +50,7 @@ static QueueHandle_t encoder;
 static const char*   TAG = "DISPLAY";
 static u8g2_t        s_u8g2;
 
-static TrackInfo track = { .artists.type = STRING_LIST };
+static TrackInfo track = { .name = { "No device playing..." }, .artists.type = STRING_LIST };
 
 /* Globally scoped variables definitions -------------------------------------*/
 TaskHandle_t DISPLAY_TASK = NULL;
@@ -100,7 +101,7 @@ static void setup_display()
     u8g2_esp32_hal.bus.spi.mosi = GPIO_NUM_13;
     u8g2_esp32_hal.bus.spi.cs = GPIO_NUM_15;
     u8g2_esp32_hal.bus.spi.flags = SPI_DEVICE_POSITIVE_CS; // https://www.esp32.com/viewtopic.php?p=88613#p88613
-    u8g2_esp32_hal.bus.spi.clock_speed_hz = 300000;
+    u8g2_esp32_hal.bus.spi.clock_speed_hz = 100000;
 
     u8g2_esp32_hal_init(u8g2_esp32_hal);
 
@@ -130,15 +131,16 @@ static void now_playing_page()
 
     SpotifyClientEvent_t event;
 
-
     u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
     msg_info_t trk;
-    TickType_t start;
-    time_t     progress_base;
-    time_t     last_progress;
+    TickType_t last_evt;
     time_t     progress_ms;
-    char       mins[3], secs[3];
+    char       time[6] = { "00:00" };
     trk.height = u8g2_GetMaxCharHeight(&s_u8g2);
+
+    /* Progress bar */
+    long           bar_width;
+    const uint16_t max_bar_width = s_u8g2.width - 20;
 
     // la primera vez esperamos indefinidamente
     spotify_wait_event(&event, portMAX_DELAY);
@@ -153,18 +155,15 @@ static void now_playing_page()
         trk.flank_tcount = 0;
         trk.offset = 0;
 
-        start = xTaskGetTickCount();
-        last_progress = track.progress_ms;
+        last_evt = xTaskGetTickCount();
         progress_ms = track.progress_ms;
-        strcpy(mins, u8x8_u8toa(track.progress_ms / 60000, 2));
-        strcpy(secs, u8x8_u8toa((track.progress_ms / 1000) % 60, 2));
+        on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
         break;
     case SAME_TRACK:
         spotify_dispatch_event(DATA_PROCESSED_EVENT);
         break;
     default:
         spotify_dispatch_event(DATA_PROCESSED_EVENT);
-        spotify_clear_track(&track);
         break;
     }
 
@@ -172,8 +171,8 @@ static void now_playing_page()
 
         /* Wait for track event ------------------------------------------------------*/
 
-        if (pdPASS == spotify_wait_event(&event, pdMS_TO_TICKS(50))) {
-            start = xTaskGetTickCount();
+        if (pdPASS == spotify_wait_event(&event, 0)) {
+            last_evt = xTaskGetTickCount();
 
             switch (event.type) {
             case NEW_TRACK:
@@ -187,10 +186,8 @@ static void now_playing_page()
                 trk.flank_tcount = 0;
                 trk.offset = 0;
 
-                last_progress = track.progress_ms;
                 progress_ms = track.progress_ms;
-                strcpy(mins, u8x8_u8toa(track.progress_ms / 60000, 2));
-                strcpy(secs, u8x8_u8toa((track.progress_ms / 1000) % 60, 2));
+                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
                 break;
             case SAME_TRACK:
                 ESP_LOGD(TAG, "Same track event");
@@ -199,36 +196,25 @@ static void now_playing_page()
                 track.isPlaying = track_updated->isPlaying;
                 track.progress_ms = track_updated->progress_ms;
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                last_progress = track.progress_ms;
                 progress_ms = track.progress_ms;
+                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
                 break;
             default:
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                spotify_clear_track(&track);
                 continue;
             }
-
         } else { /* expired */
-            TickType_t finish = xTaskGetTickCount();
             if (track.isPlaying) {
-                progress_ms = track.progress_ms + pdTICKS_TO_MS(finish - start);
-            }
-
-            strcpy(mins, u8x8_u8toa(progress_ms / 60000, 2));
-            /* if there's an increment of one second */
-            if ((progress_ms / 1000) != (last_progress / 1000)) {
-                last_progress = progress_ms;
-                strcpy(secs, u8x8_u8toa((progress_ms / 1000) % 60, 2));
-                ESP_LOGD(TAG, "Time: %s:%s", mins, secs);
+                progress_ms = track.progress_ms + pdTICKS_TO_MS(xTaskGetTickCount() - last_evt);
+                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
             }
         }
 
         /* Display track information -------------------------------------------------*/
-
-        u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
         u8g2_ClearBuffer(&s_u8g2);
 
         /* print Track name */
+        u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
         u8g2_DrawFrame(&s_u8g2, 0, trk.height, s_u8g2.width, trk.height + 4);
         u8g2_DrawUTF8(&s_u8g2, trk.offset + 2, 35, track.name);
 
@@ -244,7 +230,7 @@ static void now_playing_page()
                     trk.offset = 0;
                     trk.flank_tcount = xTaskGetTickCount();
                 } else {
-                    trk.offset -= 2; // scroll by two pixels
+                    trk.offset -= 3; // scroll by three pixels
                     if ((u8g2_uint_t)trk.offset < (u8g2_uint_t)(s_u8g2.width - trk.width)) { /* right flank reached */
                         trk.on_right_flank = true;
                         trk.flank_tcount = xTaskGetTickCount();
@@ -257,19 +243,22 @@ static void now_playing_page()
 
         /* Time progress */
         u8g2_SetFont(&s_u8g2, TIME_FONT);
-        u8g2_DrawStr(&s_u8g2, 0, s_u8g2.height, mins);
-        u8g2_DrawStr(&s_u8g2, u8g2_GetStrWidth(&s_u8g2, mins) - 1, s_u8g2.height, ":");
-        u8g2_DrawStr(&s_u8g2, u8g2_GetStrWidth(&s_u8g2, mins) + 3, s_u8g2.height, secs);
+        u8g2_DrawStr(&s_u8g2, 0, s_u8g2.height, time);
 
         /* Progress bar */
-        const uint16_t max_bar_width = s_u8g2.width - 20;
         u8g2_DrawFrame(&s_u8g2, 20, s_u8g2.height - 5, max_bar_width, 5);
-        float progress_percent = ((float)(progress_ms)) / track.duration_ms;
-        long  bar_width = progress_percent * max_bar_width;
         u8g2_DrawBox(&s_u8g2, 20, s_u8g2.height - 5, (u8g2_uint_t)bar_width, 5);
 
         u8g2_SendBuffer(&s_u8g2);
     }
+}
+
+static inline void on_update_progress(const time_t* new_progress, char* time, long* bar_width, uint16_t max_bar_width)
+{
+    memcpy(time, u8x8_u8toa(*new_progress / 60000, 2), 2);
+    memcpy(time + 3, u8x8_u8toa((*new_progress / 1000) % 60, 2), 2);
+    float progress_percent = ((float)(*new_progress)) / track.duration_ms;
+    *bar_width = progress_percent * max_bar_width;
 }
 
 /* static void dispatch_command(rotary_encoder_event_t* event)

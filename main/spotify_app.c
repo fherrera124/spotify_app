@@ -40,5 +40,4 @@ void app_main(void)
 
     display_init(5, info.queue);
 
-
 }
