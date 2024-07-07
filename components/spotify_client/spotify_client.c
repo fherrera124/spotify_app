@@ -525,7 +525,10 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void* payload, HttpStatus_Code*
     HttpStatus_Code s_code = 0;
     if (access_token_empty()) {
         if ((err = get_access_token()) != ESP_OK) {
-            goto exit;
+            if (status_code) {
+                *status_code = s_code;
+            }
+            return err;
         }
     }
     switch (cmd) {
@@ -554,7 +557,10 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void* payload, HttpStatus_Code*
     default:
         ESP_LOGE(TAG, "Unknow command: %d", cmd);
         err = ESP_FAIL;
-        goto exit;
+        if (status_code) {
+            *status_code = s_code;
+        }
+        return err;
     }
     ACQUIRE_LOCK(http_buf_lock);
     http_client.handler_cb = default_http_handler_cb;
