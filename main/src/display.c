@@ -14,16 +14,15 @@
 #define TIME_FONT       u8g2_font_tom_thumb_4x6_mr
 #define TRACK_NAME_FONT u8g2_font_helvB14_tr
 
-#define DRAW_STR(x, y, font, str)     \
-    u8g2_SetFont(&s_u8g2, font);      \
-    u8g2_DrawStr(&s_u8g2, x, y, str); \
-    u8g2_SendBuffer(&s_u8g2)
+#define DRAW_STR(x, y, font, str)   \
+    u8g2_SetFont(&u8g2, font);      \
+    u8g2_DrawStr(&u8g2, x, y, str); \
+    u8g2_SendBuffer(&u8g2)
 
 #define DRAW_STR_CLR(x, y, font, str) \
-    u8g2_ClearBuffer(&s_u8g2);        \
+    u8g2_ClearBuffer(&u8g2);          \
     DRAW_STR(x, y, font, str)
 
-#define BAR_WIDTH   3
 #define BAR_PADDING 1
 
 /* Private types -------------------------------------------------------------*/
@@ -33,8 +32,8 @@ typedef struct {
     u8g2_uint_t width;
     u8g2_uint_t height;
     u8g2_uint_t offset;
-    TickType_t  flank_tcount; /* The count of ticks when track reached a flank (left or right) */
-    bool        on_right_flank; /* Track is freezed on the right flank */
+    bool        on_an_edge; /* Track is freezed on an edge */
+    TickType_t  when_edge_reached; /* Instant when track reached an edge */
 } msg_info_t;
 
 /* Private function prototypes -----------------------------------------------*/
@@ -42,13 +41,13 @@ static void setup_display();
 static void display_task(void* arg);
 static void initial_menu_page();
 static void now_playing_page();
-static void on_update_progress(const time_t* new_progress, char* clock, long* bar_width, uint16_t max_bar_width);
+static void on_update_progress(time_t progress, char* clock, long* prog_bar, uint16_t max_bar_width);
 // static void dispatch_command(rotary_encoder_event_t* event);
 
 /* Locally scoped variables --------------------------------------------------*/
 static QueueHandle_t encoder;
 static const char*   TAG = "DISPLAY";
-static u8g2_t        s_u8g2;
+static u8g2_t        u8g2;
 
 static TrackInfo track = { .artists.type = STRING_LIST };
 
@@ -74,7 +73,7 @@ static void display_task(void* args)
     assert(track.name = strdup("No device playing..."));
     setup_display();
     while (1) {
-        initial_menu_page(&s_u8g2);
+        initial_menu_page(&u8g2);
     }
     assert(false);
 }
@@ -90,12 +89,12 @@ static void setup_display()
 
     u8g2_esp32_hal_init(u8g2_esp32_hal);
 
-    u8g2_Setup_st7920_s_128x64_f(&s_u8g2, U8G2_R0, u8g2_esp32_spi_byte_cb,
+    u8g2_Setup_st7920_s_128x64_f(&u8g2, U8G2_R0, u8g2_esp32_spi_byte_cb,
         u8g2_esp32_gpio_and_delay_cb); // init u8g2 structure
 
-    u8g2_InitDisplay(&s_u8g2); // send init sequence to the display, display is in sleep mode after this
-    u8g2_ClearDisplay(&s_u8g2);
-    u8g2_SetPowerSave(&s_u8g2, 0); // wake up display
+    u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this
+    u8g2_ClearDisplay(&u8g2);
+    u8g2_SetPowerSave(&u8g2, 0); // wake up display
 }
 
 static void initial_menu_page()
@@ -112,24 +111,35 @@ static void now_playing_page()
 
     SpotifyClientEvent_t event;
 
-    u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
+    u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
     msg_info_t trk;
     TickType_t last_evt = xTaskGetTickCount();
     time_t     progress_ms;
     char       time[6] = { "00:00" };
-    trk.height = u8g2_GetMaxCharHeight(&s_u8g2);
+    trk.height = u8g2_GetMaxCharHeight(&u8g2);
 
     /* Progress bar */
-    long           bar_width;
-    const uint16_t max_bar_width = s_u8g2.width - 20;
+    long           prog_bar;
+    const uint16_t max_bar_width = u8g2.width - 20;
 
-    // first iteration we wait forever
+    // in the first iteration we wait forever
     TickType_t ticks_waiting = portMAX_DELAY;
     while (1) {
 
         /* Wait for track event ------------------------------------------------------*/
 
         if (pdPASS == spotify_wait_event(&event, ticks_waiting)) {
+            // just to be sure...
+            if (ticks_waiting != 0 && event.type != NEW_TRACK) {
+                ESP_LOGW(TAG, "Still waiting for the first event of a track");
+                ESP_LOGW(TAG, "Event: %d", event.type);
+                if (event.type = NO_PLAYER_ACTIVE) {
+                    // TODO: get all available devices
+                    continue;
+                } else {
+                    continue;
+                }
+            }
             ticks_waiting = 0;
             last_evt = xTaskGetTickCount();
 
@@ -138,13 +148,13 @@ static void now_playing_page()
                 spotify_clear_track(&track);
                 spotify_clone_track(&track, (TrackInfo*)event.payload);
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
-                trk.width = u8g2_GetUTF8Width(&s_u8g2, track.name);
-                trk.on_right_flank = false;
-                trk.flank_tcount = 0;
+                u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
+                trk.width = u8g2_GetUTF8Width(&u8g2, track.name);
+                trk.on_an_edge = false;
+                trk.when_edge_reached = 0;
                 trk.offset = 0;
                 progress_ms = track.progress_ms;
-                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
+                on_update_progress(progress_ms, time, &prog_bar, max_bar_width);
                 break;
             case SAME_TRACK:
                 TrackInfo* track_updated = event.payload;
@@ -152,7 +162,10 @@ static void now_playing_page()
                 track.progress_ms = track_updated->progress_ms;
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
                 progress_ms = track.progress_ms;
-                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
+                on_update_progress(progress_ms, time, &prog_bar, max_bar_width);
+                break;
+            case NO_PLAYER_ACTIVE:
+                // TODO: get all devices available
                 break;
             default:
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
@@ -161,7 +174,7 @@ static void now_playing_page()
         } else { /* expired */
             if (track.isPlaying) {
                 progress_ms = track.progress_ms + pdTICKS_TO_MS(xTaskGetTickCount() - last_evt);
-                on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
+                on_update_progress(progress_ms, time, &prog_bar, max_bar_width);
             }
         }
 
@@ -195,29 +208,29 @@ static void now_playing_page()
             }
         }
         /* Display track information -------------------------------------------------*/
-        u8g2_ClearBuffer(&s_u8g2);
+        u8g2_ClearBuffer(&u8g2);
 
         /* print Track name */
-        u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
-        u8g2_DrawFrame(&s_u8g2, 0, trk.height, s_u8g2.width, trk.height + 4);
-        u8g2_DrawUTF8(&s_u8g2, trk.offset + 2, 35, track.name);
+        u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
+        u8g2_DrawFrame(&u8g2, 0, trk.height, u8g2.width, trk.height + 4);
+        u8g2_DrawUTF8(&u8g2, trk.offset + 2, 35, track.name);
 
         /* When the track doesn't fit on display, the offset is
          * updated on each iteration to make it scroll */
-        if (trk.width > s_u8g2.width) {
-            /* ticks transcurred since reached a flank */
-            TickType_t ticks_on_flank = xTaskGetTickCount() - trk.flank_tcount;
+        if (trk.width > u8g2.width) {
+            /* ticks on an edge */
+            TickType_t ticks_on_edge = xTaskGetTickCount() - trk.when_edge_reached;
             /* Track can scroll if it exceeds the threshold of being frozen on one edge */
-            if (pdMS_TO_TICKS(1000) < ticks_on_flank) { /* threshold: 1000 ms */
-                if (trk.on_right_flank) { /* go to the left flank */
-                    trk.on_right_flank = false;
+            if (pdMS_TO_TICKS(1000) < ticks_on_edge) { /* threshold: 1000 ms */
+                if (trk.on_an_edge) { /* go to the left flank */
+                    trk.on_an_edge = false;
                     trk.offset = 0;
-                    trk.flank_tcount = xTaskGetTickCount();
+                    trk.when_edge_reached = xTaskGetTickCount();
                 } else {
                     trk.offset -= 2; // scroll by two pixels
-                    if ((u8g2_uint_t)trk.offset < (u8g2_uint_t)(s_u8g2.width - trk.width)) { /* right flank reached */
-                        trk.on_right_flank = true;
-                        trk.flank_tcount = xTaskGetTickCount();
+                    if ((u8g2_uint_t)trk.offset < (u8g2_uint_t)(u8g2.width - trk.width)) { /* right flank reached */
+                        trk.on_an_edge = true;
+                        trk.when_edge_reached = xTaskGetTickCount();
                     }
                 }
             }
@@ -226,21 +239,21 @@ static void now_playing_page()
         /* TODO: implement */
 
         /* Time progress */
-        u8g2_SetFont(&s_u8g2, TIME_FONT);
-        u8g2_DrawStr(&s_u8g2, 0, s_u8g2.height, time);
+        u8g2_SetFont(&u8g2, TIME_FONT);
+        u8g2_DrawStr(&u8g2, 0, u8g2.height, time);
 
         /* Progress bar */
-        u8g2_DrawFrame(&s_u8g2, 20, s_u8g2.height - 5, max_bar_width, 5);
-        u8g2_DrawBox(&s_u8g2, 20, s_u8g2.height - 5, (u8g2_uint_t)bar_width, 5);
+        u8g2_DrawFrame(&u8g2, 20, u8g2.height - 5, max_bar_width, 5);
+        u8g2_DrawBox(&u8g2, 20, u8g2.height - 5, (u8g2_uint_t)prog_bar, 5);
 
-        u8g2_SendBuffer(&s_u8g2);
+        u8g2_SendBuffer(&u8g2);
     }
 }
 
-static inline void on_update_progress(const time_t* new_progress, char* time, long* bar_width, uint16_t max_bar_width)
+static inline void on_update_progress(const time_t progress, char* time, long* prog_bar, uint16_t max_bar_width)
 {
-    memcpy(time, u8x8_u8toa(*new_progress / 60000, 2), 2);
-    memcpy(time + 3, u8x8_u8toa((*new_progress / 1000) % 60, 2), 2);
-    float progress_percent = ((float)(*new_progress)) / track.duration_ms;
-    *bar_width = progress_percent * max_bar_width;
+    memcpy(time, u8x8_u8toa(progress / 60000, 2), 2);
+    memcpy(time + 3, u8x8_u8toa((progress / 1000) % 60, 2), 2);
+    float progress_percent = ((float)progress) / track.duration_ms;
+    *prog_bar = progress_percent * max_bar_width;
 }

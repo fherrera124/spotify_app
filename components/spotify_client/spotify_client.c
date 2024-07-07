@@ -359,7 +359,7 @@ static void player_task(void* pvParameters)
             ESP_ERROR_CHECK(get_access_token());
             // if there is a device atached to playback,
             // instead of wait for an event from ws, we
-            // send a "fake" PLAYER_STATE_CHANGED event
+            // send a "fake" NEW_TRACK event
             HttpStatus_Code status_code;
             ESP_ERROR_CHECK(player_cmd(GET_STATE, NULL, &status_code));
             if (status_code == HttpStatus_Ok) {

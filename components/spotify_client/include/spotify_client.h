@@ -7,10 +7,9 @@
 
 /* Exported types ------------------------------------------------------------*/
 typedef enum {
-    PLAYER_STATE_CHANGED,
-    SAME_TRACK, // for testing
-    NEW_TRACK, // for testing
-    DEVICE_STATE_CHANGED,
+    SAME_TRACK,
+    NEW_TRACK,
+    DEVICE_STATE_CHANGED, // <todo: delete later
     ACTIVE_DEVICES_FOUND,
     NO_ACTIVE_DEVICES,
     LAST_DEVICE_FAILED,
