@@ -1,0 +1,15 @@
+menu "Spotify Client Configuration"
+
+    config DISCORD_TOKEN
+        string "Discord Token"
+        default ""
+        help
+        	The token associated to your Discord account. TODO: add steps to obtain it.
+        	
+    config SPOTIFY_UID
+        string "Spotify UID"
+        default ""
+        help
+        	The user ID of your Spotify account. TODO: add steps to obtain it.
+
+endmenu

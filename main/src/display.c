@@ -50,7 +50,7 @@ static QueueHandle_t encoder;
 static const char*   TAG = "DISPLAY";
 static u8g2_t        s_u8g2;
 
-static TrackInfo track = { .name = { "No device playing..." }, .artists.type = STRING_LIST };
+static TrackInfo track = { .artists.type = STRING_LIST };
 
 /* Globally scoped variables definitions -------------------------------------*/
 TaskHandle_t DISPLAY_TASK = NULL;
@@ -69,29 +69,14 @@ void send_err(const char* msg)
 }
 
 /* Private functions ---------------------------------------------------------*/
-static void draw_volume_bars(uint8_t percent)
-{
-    uint8_t max_height = s_u8g2.height / 2;
-    uint8_t width_percent = (percent * s_u8g2.width) / 100;
-
-    u8g2_ClearBuffer(&s_u8g2);
-    for (uint8_t x = 0; x < width_percent; x += (BAR_WIDTH + BAR_PADDING)) {
-        uint8_t bar_height = (x * max_height) / s_u8g2.width;
-        uint8_t y = s_u8g2.height - bar_height;
-        u8g2_DrawBox(&s_u8g2, x, y, BAR_WIDTH, bar_height);
-    }
-    u8g2_SendBuffer(&s_u8g2);
-}
-
 static void display_task(void* args)
 {
-    assert(track.name = calloc(1, 1));
+    assert(track.name = strdup("No device playing..."));
     setup_display();
-
     while (1) {
         initial_menu_page(&s_u8g2);
     }
-    assert(false && "Unexpected exit of infinite task loop");
+    assert(false);
 }
 
 static void setup_display()
@@ -115,10 +100,6 @@ static void setup_display()
 
 static void initial_menu_page()
 {
-    uint8_t selection = 1;
-
-    u8g2_SetFont(&s_u8g2, MENU_FONT);
-
     return now_playing_page();
 }
 
@@ -210,6 +191,35 @@ static void now_playing_page()
             }
         }
 
+        /* Encoder -------------------------------------------------------------------*/
+        rotary_encoder_event_t queue_event;
+        if (pdTRUE == xQueueReceive(encoder, &queue_event, 0)) {
+            if (queue_event.event_type == BUTTON_EVENT) {
+                switch (queue_event.btn_event) {
+                case SHORT_PRESS:
+                    SendEvent_t evt = track.isPlaying ? DO_PAUSE : DO_PLAY;
+                    spotify_dispatch_event(evt);
+                    break;
+                case MEDIUM_PRESS:
+                    /* DISABLE_PLAYER_TASK;
+                    return now_playing_context_menu(); */
+                    break;
+                case LONG_PRESS:
+                    /* DISABLE_PLAYER_TASK;
+                    return initial_menu_page(); */
+                    break;
+                }
+            } else { /* ROTARY_ENCODER_EVENT intercepted */
+                SendEvent_t evt = queue_event.re_state.direction == ROTARY_ENCODER_DIRECTION_CLOCKWISE ? DO_PREVIOUS : DO_NEXT;
+                spotify_dispatch_event(evt);
+                /* now block the task to ignore the values the ISR is storing
+                 * in the queue while the rotary encoder is still moving */
+                vTaskDelay(pdMS_TO_TICKS(500));
+                /* The task is active again. Reset the queue to discard
+                 * the last move of the rotary encoder */
+                xQueueReset(encoder);
+            }
+        }
         /* Display track information -------------------------------------------------*/
         u8g2_ClearBuffer(&s_u8g2);
 
@@ -230,7 +240,7 @@ static void now_playing_page()
                     trk.offset = 0;
                     trk.flank_tcount = xTaskGetTickCount();
                 } else {
-                    trk.offset -= 3; // scroll by three pixels
+                    trk.offset -= 2; // scroll by two pixels
                     if ((u8g2_uint_t)trk.offset < (u8g2_uint_t)(s_u8g2.width - trk.width)) { /* right flank reached */
                         trk.on_right_flank = true;
                         trk.flank_tcount = xTaskGetTickCount();
@@ -239,7 +249,7 @@ static void now_playing_page()
             }
         }
         /* Track artists */
-        /* IMPLEMENT */
+        /* TODO: implement */
 
         /* Time progress */
         u8g2_SetFont(&s_u8g2, TIME_FONT);
@@ -260,15 +270,3 @@ static inline void on_update_progress(const time_t* new_progress, char* time, lo
     float progress_percent = ((float)(*new_progress)) / track.duration_ms;
     *bar_width = progress_percent * max_bar_width;
 }
-
-/* static void dispatch_command(rotary_encoder_event_t* event)
-{
-    PlayerCommand_t cmd;
-
-    if (event->event_type == BUTTON_EVENT) {
-        cmd = TOGGLE;
-    } else {
-        cmd = event->re_state.direction == ROTARY_ENCODER_DIRECTION_CLOCKWISE ? PREVIOUS : NEXT;
-    }
-    player_cmd(cmd); // TODO: maybe we should return de status code
-} */
