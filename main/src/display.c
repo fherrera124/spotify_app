@@ -114,7 +114,7 @@ static void now_playing_page()
 
     u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
     msg_info_t trk;
-    TickType_t last_evt;
+    TickType_t last_evt = xTaskGetTickCount();
     time_t     progress_ms;
     char       time[6] = { "00:00" };
     trk.height = u8g2_GetMaxCharHeight(&s_u8g2);
@@ -123,36 +123,14 @@ static void now_playing_page()
     long           bar_width;
     const uint16_t max_bar_width = s_u8g2.width - 20;
 
-    // la primera vez esperamos indefinidamente
-    spotify_wait_event(&event, portMAX_DELAY);
-    switch (event.type) {
-    case NEW_TRACK:
-        spotify_clear_track(&track);
-        spotify_clone_track(&track, (TrackInfo*)event.payload);
-        spotify_dispatch_event(DATA_PROCESSED_EVENT);
-        ESP_LOGD(TAG, "New track event");
-        trk.width = u8g2_GetUTF8Width(&s_u8g2, track.name);
-        trk.on_right_flank = false;
-        trk.flank_tcount = 0;
-        trk.offset = 0;
-
-        last_evt = xTaskGetTickCount();
-        progress_ms = track.progress_ms;
-        on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
-        break;
-    case SAME_TRACK:
-        spotify_dispatch_event(DATA_PROCESSED_EVENT);
-        break;
-    default:
-        spotify_dispatch_event(DATA_PROCESSED_EVENT);
-        break;
-    }
-
+    // first iteration we wait forever
+    TickType_t ticks_waiting = portMAX_DELAY;
     while (1) {
 
         /* Wait for track event ------------------------------------------------------*/
 
-        if (pdPASS == spotify_wait_event(&event, 0)) {
+        if (pdPASS == spotify_wait_event(&event, ticks_waiting)) {
+            ticks_waiting = 0;
             last_evt = xTaskGetTickCount();
 
             switch (event.type) {
