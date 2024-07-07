@@ -160,20 +160,16 @@ static void now_playing_page()
                 spotify_clear_track(&track);
                 spotify_clone_track(&track, (TrackInfo*)event.payload);
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                ESP_LOGD(TAG, "New track event");
                 u8g2_SetFont(&s_u8g2, TRACK_NAME_FONT);
                 trk.width = u8g2_GetUTF8Width(&s_u8g2, track.name);
                 trk.on_right_flank = false;
                 trk.flank_tcount = 0;
                 trk.offset = 0;
-
                 progress_ms = track.progress_ms;
                 on_update_progress(&progress_ms, time, &bar_width, max_bar_width);
                 break;
             case SAME_TRACK:
-                ESP_LOGD(TAG, "Same track event");
                 TrackInfo* track_updated = event.payload;
-
                 track.isPlaying = track_updated->isPlaying;
                 track.progress_ms = track_updated->progress_ms;
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);

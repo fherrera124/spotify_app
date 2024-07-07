@@ -199,7 +199,10 @@ esp_err_t spotify_play_context_uri(const char* uri, HttpStatus_Code* status_code
     HttpStatus_Code s_code = 0;
     if (access_token_empty()) {
         if ((err = get_access_token()) != ESP_OK) {
-            goto exit;
+            if (status_code) {
+                *status_code = s_code;
+            }
+            return err;
         }
     }
     ACQUIRE_LOCK(http_buf_lock);
@@ -221,22 +224,19 @@ retry:
         ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %d", s_code, length);
         ESP_LOGD(TAG, "%s", http_buffer);
         esp_http_client_set_post_field(http_client.handle, NULL, 0);
-        RELEASE_LOCK(http_buf_lock);
-        goto exit;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        goto exit;
     }
-exit:
     if (status_code) {
         *status_code = s_code;
     }
+    RELEASE_LOCK(http_buf_lock);
     return err;
 }
 
 List* spotify_user_playlists()
 {
+    esp_err_t err;
     if (access_token_empty()) {
         ESP_ERROR_CHECK(get_access_token());
     }
@@ -247,28 +247,24 @@ List* spotify_user_playlists()
     PREPARE_CLIENT(http_client, access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
-    esp_err_t err = esp_http_client_perform(http_client.handle);
-    if (err == ESP_OK) {
+    if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK) {
         s_retries = 0;
         HttpStatus_Code status_code = esp_http_client_get_status_code(http_client.handle);
         int             length = esp_http_client_get_content_length(http_client.handle);
         ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %d", status_code, length);
         if (status_code != HttpStatus_Ok) {
             ESP_LOGE(TAG, "Error. HTTP Status Code = %d", status_code);
-            RELEASE_LOCK(http_buf_lock);
-            return &playlists; // TODO: maybe return NULL on error
         }
-        RELEASE_LOCK(http_buf_lock);
-        return &playlists;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        return &playlists;
     }
+    RELEASE_LOCK(http_buf_lock);
+    return &playlists;
 }
 
 List* spotify_available_devices()
 {
+    esp_err_t err;
     if (access_token_empty()) {
         ESP_ERROR_CHECK(get_access_token());
     }
@@ -279,26 +275,22 @@ List* spotify_available_devices()
     PREPARE_CLIENT(http_client, access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
-    esp_err_t err = esp_http_client_perform(http_client.handle);
-    if (err == ESP_OK) {
+    if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK) {
         s_retries = 0;
         HttpStatus_Code status_code = esp_http_client_get_status_code(http_client.handle);
         int             length = esp_http_client_get_content_length(http_client.handle);
         ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %d", status_code, length);
-        if (status_code != HttpStatus_Ok) {
+        if (status_code == HttpStatus_Ok) {
+            ESP_LOGD(TAG, "Active devices:\n%s", http_buffer);
+            parse_available_devices(http_buffer, &devices);
+        } else {
             ESP_LOGE(TAG, "Error. HTTP Status Code = %d", status_code);
-            RELEASE_LOCK(http_buf_lock);
-            return &devices; // TODO: maybe return NULL on error
         }
-        ESP_LOGD(TAG, "Active devices:\n%s", http_buffer);
-        parse_available_devices(http_buffer, &devices);
-        RELEASE_LOCK(http_buf_lock);
-        return &devices;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        return &devices;
     }
+    RELEASE_LOCK(http_buf_lock);
+    return &devices;
 }
 
 void spotify_clear_track(TrackInfo* track)
@@ -427,6 +419,7 @@ static void player_task(void* pvParameters)
 
 static esp_err_t confirm_ws_session(char* conn_id)
 {
+    esp_err_t err;
     ACQUIRE_LOCK(http_buf_lock);
     http_client.handler_cb = default_http_handler_cb;
     http_client.method = HTTP_METHOD_PUT;
@@ -435,21 +428,19 @@ static esp_err_t confirm_ws_session(char* conn_id)
     PREPARE_CLIENT(http_client, access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
-    esp_err_t err = esp_http_client_perform(http_client.handle);
-    if (err == ESP_OK) {
+    if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK) {
         s_retries = 0;
         HttpStatus_Code status_code = esp_http_client_get_status_code(http_client.handle);
         int             length = esp_http_client_get_content_length(http_client.handle);
         ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %d", status_code, length);
         free(conn_id);
         free(url);
-        RELEASE_LOCK(http_buf_lock);
-        return (status_code == HttpStatus_Ok) ? ESP_OK : ESP_FAIL;
+        err = (status_code == HttpStatus_Ok) ? ESP_OK : ESP_FAIL;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        return err;
     }
+    RELEASE_LOCK(http_buf_lock);
+    return err;
 }
 
 static inline esp_err_t http_retries_available(esp_err_t err)
@@ -516,16 +507,15 @@ retry:
         if (status_code == HttpStatus_Ok) {
             parse_access_token(http_buffer, access_token.value + 7, 400 - 7);
             ESP_LOGD(TAG, "Access Token obtained:\n%s", &access_token.value[7]);
-            RELEASE_LOCK(http_buf_lock);
-            return ESP_OK;
+        } else {
+            ESP_LOGE(TAG, "Error trying to obtain an access token. Status code: %d", status_code);
+            err = ESP_FAIL;
         }
-        ESP_LOGE(TAG, "Error trying to obtain an access token. Status code: %d", status_code);
-        return ESP_FAIL;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        return err;
     }
+    RELEASE_LOCK(http_buf_lock);
+    return err;
 }
 
 // ok
@@ -577,17 +567,13 @@ retry:
         int length = esp_http_client_get_content_length(http_client.handle);
         ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %d", s_code, length);
         ESP_LOGD(TAG, "%s", http_buffer);
-        RELEASE_LOCK(http_buf_lock);
-        goto exit;
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
-    } else {
-        goto exit;
     }
-exit:
     if (status_code) {
         *status_code = s_code;
     }
+    RELEASE_LOCK(http_buf_lock);
     return err;
 }
 
