@@ -14,7 +14,7 @@
 #define ACCESS_TOKEN_URL    "https://discord.com/api/v8/users/@me/connections/spotify/" CONFIG_SPOTIFY_UID "/access-token"
 #define PLAYER              "/me/player"
 #define TOKEN_URL           "https://accounts.spotify.com/api/token"
-#define PLAYING             PLAYER "?market=AR&additional_types=episode"
+#define PLAYER_STATE        PLAYER "?market=from_token&additional_types=episode"
 #define PLAY_TRACK          PLAYER "/play"
 #define PAUSE_TRACK         PLAYER "/pause"
 #define PREV_TRACK          PLAYER "/previous"
@@ -554,7 +554,7 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void* payload, HttpStatus_Code*
         break;
     case GET_STATE:
         http_client.method = HTTP_METHOD_GET;
-        http_client.endpoint = PLAYERURL(PLAYER);
+        http_client.endpoint = PLAYERURL(PLAYER_STATE);
         break;
     default:
         ESP_LOGE(TAG, "Unknow command: %d", cmd);
