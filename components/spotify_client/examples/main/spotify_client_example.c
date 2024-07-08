@@ -71,8 +71,8 @@ void app_main(void)
 
     // enable the player and wait for events
     spotify_dispatch_event(ENABLE_PLAYER_EVENT);
-    SpotifyClientEvent_t event;
-    TrackInfo            track = { .artists.type = STRING_LIST };
+    SpotifyEvent_t event;
+    TrackInfo      track = { .artists.type = STRING_LIST };
     assert(track.name = calloc(1, 1));
     while (1) {
         spotify_wait_event(&event, portMAX_DELAY);

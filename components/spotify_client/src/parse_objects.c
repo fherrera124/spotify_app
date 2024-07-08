@@ -67,12 +67,12 @@ void parse_connection_id(const char* js, char** data)
     json_parse_end_static(&jctx);
 }
 
-SpotifyClientEvent_t parse_track(const char* js, TrackInfo** track, int initial_state)
+SpotifyEvent_t parse_track(const char* js, TrackInfo** track, int initial_state)
 {
     // ESP_LOGW(TAG, "%s", js);
     assert(track && *track);
 
-    SpotifyClientEvent_t spotify_evt = { .type = UNKNOW };
+    SpotifyEvent_t spotify_evt = { .type = UNKNOW };
 
     jparse_ctx_t jctx;
     ERR_CHECK(json_parse_start_static(&jctx, js, strlen(js), tokens, MAX_TOKENS));

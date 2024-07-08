@@ -97,28 +97,27 @@ static void now_playing_page()
     static TrackInfo track = { .artists.type = STRING_LIST };
     assert(track.name = strdup("No device playing..."));
     u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
-    const u8g2_uint_t    t_height = u8g2_GetMaxCharHeight(&u8g2);
-    SpotifyClientEvent_t t_evt;
-    TickType_t           t_evt_stamp = 0;
-    u8g2_uint_t          t_width = 0;
-    u8g2_uint_t          t_offset = 0;
-    TickType_t           t_edge_stamp = 0;
-    time_t               t_progress_ms = 0;
-    int8_t               t_pixels_shift = 2;
-    char                 t_time[6] = { "00:00" };
-    long                 t_prog_bar = 0;
-    const uint16_t       t_prog_width = u8g2.width - 20;
+    const u8g2_uint_t t_height = u8g2_GetMaxCharHeight(&u8g2);
+    SpotifyEvent_t    t_evt;
+    TickType_t        t_evt_stamp = 0;
+    u8g2_uint_t       t_width = 0;
+    u8g2_uint_t       t_offset = 0;
+    TickType_t        t_edge_stamp = 0;
+    int8_t            t_pixels_shift = 2;
+    char              t_time[6] = { "00:00" };
+    long              t_prog_bar = 0;
+    const uint16_t    t_prog_width = u8g2.width - 20;
 
     spotify_dispatch_event(ENABLE_PLAYER_EVENT);
     DRAW_STR_CLR(0, 20, NOTIF_FONT, "Retrieving player state...");
     // in the first iteration we wait forever
-    TickType_t ticks_waiting = portMAX_DELAY;
+    TickType_t ticks_to_wait = portMAX_DELAY;
     while (1) {
         /* Wait for track event ------------------------------------------------------*/
-        if (pdPASS == spotify_wait_event(&t_evt, ticks_waiting)) {
+        if (pdPASS == spotify_wait_event(&t_evt, ticks_to_wait)) {
             t_evt_stamp = xTaskGetTickCount();
             // just to be sure...
-            if (ticks_waiting != 0 && t_evt.type != NEW_TRACK) {
+            if (ticks_to_wait != 0 && t_evt.type != NEW_TRACK) {
                 ESP_LOGW(TAG, "Still waiting for the first event of a track");
                 ESP_LOGW(TAG, "Event: %d", t_evt.type);
                 if (t_evt.type == NO_PLAYER_ACTIVE) {
@@ -128,7 +127,7 @@ static void now_playing_page()
                     continue;
                 }
             }
-            ticks_waiting = 0;
+            ticks_to_wait = 0;
 
             switch (t_evt.type) {
             case NEW_TRACK:
@@ -140,16 +139,14 @@ static void now_playing_page()
                 t_edge_stamp = 0;
                 t_offset = 0;
                 t_pixels_shift = 2;
-                t_progress_ms = track.progress_ms;
-                on_update_progress(track.duration_ms, t_progress_ms, t_time, &t_prog_bar, t_prog_width);
+                on_update_progress(track.duration_ms, track.progress_ms, t_time, &t_prog_bar, t_prog_width);
                 break;
             case SAME_TRACK:
                 TrackInfo* t_updated = t_evt.payload;
                 track.isPlaying = t_updated->isPlaying;
                 track.progress_ms = t_updated->progress_ms;
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                t_progress_ms = track.progress_ms;
-                on_update_progress(track.duration_ms, t_progress_ms, t_time, &t_prog_bar, t_prog_width);
+                on_update_progress(track.duration_ms, track.progress_ms, t_time, &t_prog_bar, t_prog_width);
                 break;
             case NO_PLAYER_ACTIVE:
                 // TODO: get all devices available
@@ -160,7 +157,7 @@ static void now_playing_page()
             }
         } else { /* expired */
             if (track.isPlaying) {
-                t_progress_ms = track.progress_ms + pdTICKS_TO_MS(xTaskGetTickCount() - t_evt_stamp);
+                time_t t_progress_ms = track.progress_ms + pdTICKS_TO_MS(xTaskGetTickCount() - t_evt_stamp);
                 on_update_progress(track.duration_ms, t_progress_ms, t_time, &t_prog_bar, t_prog_width);
             }
         }

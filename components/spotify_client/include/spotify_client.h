@@ -54,12 +54,12 @@ typedef struct
 typedef struct {
     Event_t type;
     void*   payload;
-} SpotifyClientEvent_t;
+} SpotifyEvent_t;
 
 /* Exported functions prototypes ---------------------------------------------*/
 esp_err_t  spotify_client_init(UBaseType_t priority);
 esp_err_t  spotify_dispatch_event(SendEvent_t event);
-BaseType_t spotify_wait_event(SpotifyClientEvent_t* event, TickType_t xTicksToWait);
+BaseType_t spotify_wait_event(SpotifyEvent_t* event, TickType_t xTicksToWait);
 esp_err_t  spotify_play_context_uri(const char* uri, HttpStatus_Code* status_code);
 List*      spotify_user_playlists();
 List*      spotify_available_devices();

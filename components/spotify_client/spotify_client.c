@@ -124,7 +124,7 @@ esp_err_t spotify_client_init(UBaseType_t priority)
         return ESP_FAIL;
     }
 
-    event_queue = xQueueCreate(1, sizeof(SpotifyClientEvent_t));
+    event_queue = xQueueCreate(1, sizeof(SpotifyEvent_t));
     if (!event_queue) {
         ESP_LOGE(TAG, "Failed to create queue for events");
         return ESP_FAIL;
@@ -168,13 +168,14 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
     case DO_PAUSE:
     case DO_NEXT:
     case DO_PREVIOUS:
-        if (xSemaphoreTake(http_buf_lock, 0) == pdTRUE) {
-            RELEASE_LOCK(http_buf_lock);
-            player_cmd(event, NULL, NULL);
-        } else {
-            ESP_LOGW(TAG, "http client bussy, ignoring request");
-            return ESP_FAIL;
+        HttpStatus_Code s_code;
+        esp_err_t       err = player_cmd(event, NULL, &s_code);
+        if (err == ESP_OK && s_code == HttpStatus_Unauthorized) {
+            if ((err = get_access_token()) == ESP_OK) {
+                err = player_cmd(event, NULL, &s_code);
+            }
         }
+        return err;
         break;
     default:
         ESP_LOGE(TAG, "Unknown event: %d", event);
@@ -183,7 +184,7 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
     return ESP_OK;
 }
 
-BaseType_t spotify_wait_event(SpotifyClientEvent_t* event, TickType_t xTicksToWait)
+BaseType_t spotify_wait_event(SpotifyEvent_t* event, TickType_t xTicksToWait)
 {
     // TODO: check first if the player is enabled,
     // if not, send an event of the error
@@ -230,6 +231,7 @@ retry:
     if (status_code) {
         *status_code = s_code;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return err;
 }
@@ -258,6 +260,7 @@ retry:
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return &playlists;
 }
@@ -289,6 +292,7 @@ retry:
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return &devices;
 }
@@ -335,10 +339,10 @@ static void player_task(void* pvParameters)
         .buffer = ws_buffer,
         .event_group = event_group
     };
-    int                  first_msg = 1;
-    int                  enabled = 0;
-    SpotifyClientEvent_t spotify_evt;
-    EventBits_t          uxBits;
+    int            first_msg = 1;
+    int            enabled = 0;
+    SpotifyEvent_t spotify_evt;
+    EventBits_t    uxBits;
     while (1) {
         uxBits = xEventGroupWaitBits(
             event_group,
@@ -439,6 +443,7 @@ retry:
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return err;
 }
@@ -446,16 +451,14 @@ retry:
 static inline esp_err_t http_retries_available(esp_err_t err)
 {
     static const char* HTTP_METHOD_LOOKUP[] = { "GET", "POST", "PUT" };
-    ESP_LOGE(TAG, "HTTP %s request failed: %s",
-        HTTP_METHOD_LOOKUP[http_client.method],
-        esp_err_to_name(err));
+    ESP_LOGE(TAG, "HTTP %s request failed: %s", HTTP_METHOD_LOOKUP[http_client.method], esp_err_to_name(err));
     if (++s_retries <= RETRIES_ERR_CONN) {
+        esp_http_client_close(http_client.handle);
         vTaskDelay(pdMS_TO_TICKS(1000));
         ESP_LOGW(TAG, "Retrying %d/%d...", s_retries, RETRIES_ERR_CONN);
         debug_mem();
         return ESP_OK;
     }
-    esp_http_client_close(http_client.handle);
     s_retries = 0;
     return ESP_FAIL;
 }
@@ -516,6 +519,7 @@ retry:
     } else if (http_retries_available(err) == ESP_OK) {
         goto retry;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return err;
 }
@@ -525,14 +529,7 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void* payload, HttpStatus_Code*
 {
     esp_err_t       err;
     HttpStatus_Code s_code = 0;
-    if (access_token_empty()) {
-        if ((err = get_access_token()) != ESP_OK) {
-            if (status_code) {
-                *status_code = s_code;
-            }
-            return err;
-        }
-    }
+
     switch (cmd) {
     case PAUSE:
         http_client.method = HTTP_METHOD_PUT;
@@ -581,6 +578,7 @@ retry:
     if (status_code) {
         *status_code = s_code;
     }
+    esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
     return err;
 }
