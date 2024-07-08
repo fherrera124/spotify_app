@@ -27,6 +27,21 @@
 
 /* Private types -------------------------------------------------------------*/
 
+typedef struct
+{
+    const char*    text;
+    u8g2_uint_t    offset;
+    TickType_t     edge_stamp;
+    TickType_t     max_ticks_on_edge;
+    int8_t         pixels_shift; /* pixels on each iteration, must be greater than zero on initialization*/
+    const uint8_t* font;
+    u8g2_uint_t    x0; /* left corner */
+    u8g2_uint_t    x1; /* right corner */
+    u8g2_uint_t    y1; /* lower edge */
+    u8g2_uint_t    t_width;
+    bool           init;
+} ScrollData_t;
+
 // stores the state of the message scrolling on display
 
 /* Private function prototypes -----------------------------------------------*/
@@ -35,6 +50,7 @@ static void display_task(void* arg);
 static void initial_menu_page();
 static void now_playing_page();
 static void on_update_progress(time_t duration, time_t progress, char* clock, long* t_prog_bar, uint16_t t_prog_width);
+static void scroll_text(ScrollData_t* scroll_d);
 // static void dispatch_command(rotary_encoder_event_t* event);
 
 /* Locally scoped variables --------------------------------------------------*/
@@ -96,22 +112,29 @@ static void now_playing_page()
 {
     static TrackInfo track = { .artists.type = STRING_LIST };
     assert(track.name = strdup("No device playing..."));
+
     u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
     const u8g2_uint_t t_height = u8g2_GetMaxCharHeight(&u8g2);
-    SpotifyEvent_t    t_evt;
-    TickType_t        t_evt_stamp = 0;
-    u8g2_uint_t       t_width = 0;
-    u8g2_uint_t       t_offset = 0;
-    TickType_t        t_edge_stamp = 0;
-    int8_t            t_pixels_shift = 2;
-    char              t_time[6] = { "00:00" };
-    long              t_prog_bar = 0;
-    const uint16_t    t_prog_width = u8g2.width - 20;
+    ScrollData_t      s_d = {
+             .font = TRACK_NAME_FONT,
+             .max_ticks_on_edge = pdMS_TO_TICKS(1500),
+             .pixels_shift = 2,
+             .x0 = 3,
+             .x1 = u8g2.width - 3,
+             .y1 = t_height + 3,
+    };
+
+    SpotifyEvent_t t_evt;
+    TickType_t     t_evt_stamp = 0;
+    char           t_time[6] = { "00:00" };
+    long           t_prog_bar = 0;
+    const uint16_t t_prog_width = u8g2.width - 20;
 
     spotify_dispatch_event(ENABLE_PLAYER_EVENT);
-    DRAW_STR_CLR(0, 20, NOTIF_FONT, "Retrieving player state...");
+
     // in the first iteration we wait forever
-    TickType_t ticks_to_wait = portMAX_DELAY;
+    TickType_t ticks_to_wait
+        = portMAX_DELAY;
     while (1) {
         /* Wait for track event ------------------------------------------------------*/
         if (pdPASS == spotify_wait_event(&t_evt, ticks_to_wait)) {
@@ -134,11 +157,8 @@ static void now_playing_page()
                 spotify_clear_track(&track);
                 spotify_clone_track(&track, (TrackInfo*)t_evt.payload);
                 spotify_dispatch_event(DATA_PROCESSED_EVENT);
-                u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
-                t_width = u8g2_GetUTF8Width(&u8g2, track.name);
-                t_edge_stamp = 0;
-                t_offset = 0;
-                t_pixels_shift = 2;
+                s_d.text = track.name,
+                s_d.init = true;
                 on_update_progress(track.duration_ms, track.progress_ms, t_time, &t_prog_bar, t_prog_width);
                 break;
             case SAME_TRACK:
@@ -195,24 +215,9 @@ static void now_playing_page()
         u8g2_ClearBuffer(&u8g2);
 
         /* print Track name */
-        u8g2_SetFont(&u8g2, TRACK_NAME_FONT);
-        u8g2_DrawFrame(&u8g2, 0, t_height, u8g2.width, t_height + 4);
-        u8g2_DrawUTF8(&u8g2, t_offset, 35, track.name);
-        /* scroll */
-        if (t_width > u8g2.width) {
-            if (!t_edge_stamp) {
-                t_offset -= t_pixels_shift;
-                if ((u8g2_uint_t)t_offset < (u8g2_uint_t)(u8g2.width - t_width)) {
-                    t_edge_stamp = xTaskGetTickCount();
-                    t_pixels_shift = -t_pixels_shift;
-                }
-            } else {
-                TickType_t ticks_on_edge = xTaskGetTickCount() - t_edge_stamp;
-                if (pdMS_TO_TICKS(1500) < ticks_on_edge) {
-                    t_edge_stamp = 0;
-                }
-            }
-        }
+        u8g2_DrawFrame(&u8g2, 0, s_d.y1 - t_height - 3, u8g2.width, t_height + 4);
+        scroll_text(&s_d);
+
         /* Track artists */
         /* TODO: implement */
 
@@ -234,4 +239,35 @@ static inline void on_update_progress(time_t duration_ms, time_t progress, char*
     memcpy(time + 3, u8x8_u8toa((progress / 1000) % 60, 2), 2);
     float progress_percent = ((float)progress) / duration_ms;
     *t_prog_bar = progress_percent * t_prog_width;
+}
+
+static void scroll_text(ScrollData_t* s_d)
+{
+    u8g2_SetFont(&u8g2, s_d->font);
+    if (s_d->init) {
+        s_d->t_width = u8g2_GetUTF8Width(&u8g2, s_d->text);
+        s_d->offset = 0;
+        s_d->edge_stamp = 0;
+        s_d->init = false;
+        if (s_d->pixels_shift < 0) {
+            s_d->pixels_shift = -s_d->pixels_shift;
+        }
+    }
+    u8g2_SetClipWindow(&u8g2, s_d->x0, 0, s_d->x1, s_d->y1);
+    u8g2_DrawUTF8(&u8g2, s_d->x0 + s_d->offset, s_d->y1 - 4, s_d->text);
+    if (s_d->t_width > s_d->x1 - s_d->x0) {
+        if (!s_d->edge_stamp) {
+            s_d->offset -= s_d->pixels_shift;
+            if ((u8g2_uint_t)s_d->offset < (u8g2_uint_t)(s_d->x1 - s_d->x0 - s_d->t_width)) {
+                s_d->edge_stamp = xTaskGetTickCount();
+                s_d->pixels_shift = -s_d->pixels_shift;
+            }
+        } else {
+            TickType_t ticks_on_edge = xTaskGetTickCount() - s_d->edge_stamp;
+            if (s_d->max_ticks_on_edge < ticks_on_edge) {
+                s_d->edge_stamp = 0;
+            }
+        }
+    }
+    u8g2_SetMaxClipWindow(&u8g2);
 }
