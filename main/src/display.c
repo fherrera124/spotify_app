@@ -129,6 +129,8 @@ static void now_playing_page()
     char           t_time[6] = { "00:00" };
     long           t_prog_bar = 0;
     const uint16_t t_prog_width = u8g2.width - 20;
+    TickType_t     notif = 0;
+    SendEvent_t    send_evt = 0;
 
     spotify_dispatch_event(ENABLE_PLAYER_EVENT);
 
@@ -185,11 +187,11 @@ static void now_playing_page()
         /* Encoder -------------------------------------------------------------------*/
         rotary_encoder_event_t queue_event;
         if (pdTRUE == xQueueReceive(encoder, &queue_event, 0)) {
+            notif = xTaskGetTickCount();
             if (queue_event.event_type == BUTTON_EVENT) {
                 switch (queue_event.btn_event) {
                 case SHORT_PRESS:
-                    SendEvent_t t_evt = track.isPlaying ? DO_PAUSE : DO_PLAY;
-                    spotify_dispatch_event(t_evt);
+                    send_evt = track.isPlaying ? DO_PAUSE_EVENT : DO_PLAY_EVENT;
                     break;
                 case MEDIUM_PRESS:
                     /* DISABLE_PLAYER_TASK;
@@ -201,15 +203,11 @@ static void now_playing_page()
                     break;
                 }
             } else { /* ROTARY_ENCODER_EVENT intercepted */
-                SendEvent_t t_evt = queue_event.re_state.direction == ROTARY_ENCODER_DIRECTION_CLOCKWISE ? DO_PREVIOUS : DO_NEXT;
-                spotify_dispatch_event(t_evt);
-                /* now block the task to ignore the values the ISR is storing
-                 * in the queue while the rotary encoder is still moving */
-                vTaskDelay(pdMS_TO_TICKS(500));
-                /* The task is active again. Reset the queue to discard
-                 * the last move of the rotary encoder */
-                xQueueReset(encoder);
+                ESP_LOGI(TAG, "Encoder direction: %d", queue_event.re_state.direction);
+                ESP_LOGI(TAG, "Encoder position: %li", queue_event.re_state.position);
+                send_evt = queue_event.re_state.direction == ROTARY_ENCODER_DIRECTION_CLOCKWISE ? DO_PREVIOUS_EVENT : DO_NEXT_EVENT;
             }
+            spotify_dispatch_event(send_evt);
         }
         /* Display track information -------------------------------------------------*/
         u8g2_ClearBuffer(&u8g2);
@@ -218,12 +216,31 @@ static void now_playing_page()
         u8g2_DrawFrame(&u8g2, 0, s_d.y1 - t_height - 3, u8g2.width, t_height + 4);
         scroll_text(&s_d);
 
-        /* Track artists */
-        /* TODO: implement */
+        /* TODO: Track artists */
 
         /* Time progress */
         u8g2_SetFont(&u8g2, TIME_FONT);
         u8g2_DrawStr(&u8g2, 0, u8g2.height, t_time);
+
+        /* Notifications */
+        if ((xTaskGetTickCount() - notif) < pdMS_TO_TICKS(1500)) {
+            switch (send_evt) {
+            case DO_PLAY_EVENT:
+                u8g2_DrawStr(&u8g2, 0, 40, "RESUME");
+                break;
+            case DO_PAUSE_EVENT:
+                u8g2_DrawStr(&u8g2, 0, 40, "PAUSE");
+                break;
+            case DO_PREVIOUS_EVENT:
+                u8g2_DrawStr(&u8g2, 0, 40, "PREVIOUS");
+                break;
+            case DO_NEXT_EVENT:
+                u8g2_DrawStr(&u8g2, 0, 40, "NEXT");
+                break;
+            default:
+                break;
+            }
+        }
 
         /* Progress bar */
         u8g2_DrawFrame(&u8g2, 20, u8g2.height - 5, t_prog_width, 5);

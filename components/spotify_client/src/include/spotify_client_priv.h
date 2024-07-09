@@ -31,6 +31,10 @@ extern "C" {
 #define WS_DISCONNECT_EVENT (1 << 4)
 #define WS_DATA_EVENT       (1 << 5)
 #define DATA_PROCESSED      (1 << 6)
+#define DO_PLAY             (1 << 7)
+#define DO_PAUSE            (1 << 8)
+#define DO_NEXT             (1 << 9)
+#define DO_PREVIOUS         (1 << 10)
 
 /* Exported types ------------------------------------------------------------*/
 typedef struct

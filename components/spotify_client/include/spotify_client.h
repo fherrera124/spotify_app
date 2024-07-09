@@ -21,13 +21,13 @@ typedef enum {
 } Event_t;
 
 typedef enum {
-    ENABLE_PLAYER_EVENT,
+    ENABLE_PLAYER_EVENT = 1,
     DISABLE_PLAYER_EVENT,
     DATA_PROCESSED_EVENT,
-    DO_PAUSE,
-    DO_PLAY,
-    DO_PREVIOUS,
-    DO_NEXT,
+    DO_PAUSE_EVENT,
+    DO_PLAY_EVENT,
+    DO_PREVIOUS_EVENT,
+    DO_NEXT_EVENT,
 } SendEvent_t;
 
 typedef struct

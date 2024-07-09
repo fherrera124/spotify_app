@@ -17,14 +17,7 @@
         "*.HLASM*": "hlasm",
         "*.HLA*": "hlasm",
         "sdkconfig": "c",
-        "display.h": "c",
-        "queue.h": "c",
-        "selection_list.h": "c",
-        "spotify_client.h": "c",
-        "stdlib.h": "c",
-        "string.h": "c",
-        "parse_objects.h": "c",
-        "spotify_client_priv.h": "c"
+        "*.h*": "c"
     },
     "idf.portWin": "COM5"
 }

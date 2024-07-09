@@ -164,18 +164,17 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
     case DATA_PROCESSED_EVENT:
         xEventGroupSetBits(event_group, DATA_PROCESSED);
         break;
-    case DO_PLAY:
-    case DO_PAUSE:
-    case DO_NEXT:
-    case DO_PREVIOUS:
-        HttpStatus_Code s_code;
-        esp_err_t       err = player_cmd(event, NULL, &s_code);
-        if (err == ESP_OK && s_code == HttpStatus_Unauthorized) {
-            if ((err = get_access_token()) == ESP_OK) {
-                err = player_cmd(event, NULL, &s_code);
-            }
-        }
-        return err;
+    case DO_PLAY_EVENT:
+        xEventGroupSetBits(event_group, DO_PLAY);
+        break;
+    case DO_PAUSE_EVENT:
+        xEventGroupSetBits(event_group, DO_PAUSE);
+        break;
+    case DO_NEXT_EVENT:
+        xEventGroupSetBits(event_group, DO_NEXT);
+        break;
+    case DO_PREVIOUS_EVENT:
+        xEventGroupSetBits(event_group, DO_PREVIOUS);
         break;
     default:
         ESP_LOGE(TAG, "Unknown event: %d", event);
@@ -343,15 +342,35 @@ static void player_task(void* pvParameters)
     int            enabled = 0;
     SpotifyEvent_t spotify_evt;
     EventBits_t    uxBits;
+    int            player_bits = DO_PLAY | DO_PAUSE | DO_PREVIOUS | DO_NEXT;
     while (1) {
         uxBits = xEventGroupWaitBits(
             event_group,
-            ENABLE_PLAYER | DISABLE_PLAYER | WS_DATA_EVENT | WS_DISCONNECT_EVENT | DATA_PROCESSED,
+            ENABLE_PLAYER | DISABLE_PLAYER | WS_DATA_EVENT | WS_DISCONNECT_EVENT | DATA_PROCESSED | player_bits,
             pdTRUE,
             pdFALSE,
             portMAX_DELAY);
 
-        if (uxBits & (ENABLE_PLAYER | WS_DISCONNECT_EVENT)) {
+        if (uxBits & player_bits) {
+            if (!enabled) {
+                ESP_LOGW(TAG, "Task disabled");
+                continue;
+            }
+            uint32_t n = uxBits & player_bits;
+            if ((n & (n - 1)) != 0) { // check that only a bit was set
+                ESP_LOGW(TAG, "Invalid command");
+                continue;
+            }
+            HttpStatus_Code s_code;
+            esp_err_t       err = player_cmd(n, NULL, &s_code);
+            if (err == ESP_OK && s_code == HttpStatus_Unauthorized) {
+                if ((err = get_access_token()) == ESP_OK) {
+                    err = player_cmd(n, NULL, &s_code);
+                }
+            }
+            // TODO: send error to queue if err == ESP_FAIL
+            continue;
+        } else if (uxBits & (ENABLE_PLAYER | WS_DISCONNECT_EVENT)) {
             if (uxBits & ENABLE_PLAYER) {
                 if (enabled) {
                     ESP_LOGW(TAG, "Already enabled!!");
