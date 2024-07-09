@@ -51,6 +51,7 @@ static void initial_menu_page();
 static void now_playing_page();
 static void on_update_progress(time_t duration, time_t progress, char* clock, long* t_prog_bar, uint16_t t_prog_width);
 static void scroll_text(ScrollData_t* scroll_d);
+static void print_uptime();
 // static void dispatch_command(rotary_encoder_event_t* event);
 
 /* Locally scoped variables --------------------------------------------------*/
@@ -226,21 +227,24 @@ static void now_playing_page()
         if ((xTaskGetTickCount() - notif) < pdMS_TO_TICKS(1500)) {
             switch (send_evt) {
             case DO_PLAY_EVENT:
-                u8g2_DrawStr(&u8g2, 0, 40, "RESUME");
+                u8g2_DrawStr(&u8g2, 0, 45, "RESUME");
                 break;
             case DO_PAUSE_EVENT:
-                u8g2_DrawStr(&u8g2, 0, 40, "PAUSE");
+                u8g2_DrawStr(&u8g2, 0, 45, "PAUSE");
                 break;
             case DO_PREVIOUS_EVENT:
-                u8g2_DrawStr(&u8g2, 0, 40, "PREVIOUS");
+                u8g2_DrawStr(&u8g2, 0, 45, "PREVIOUS");
                 break;
             case DO_NEXT_EVENT:
-                u8g2_DrawStr(&u8g2, 0, 40, "NEXT");
+                u8g2_DrawStr(&u8g2, 0, 45, "NEXT");
                 break;
             default:
                 break;
             }
         }
+
+        /* Uptime */
+        print_uptime();
 
         /* Progress bar */
         u8g2_DrawFrame(&u8g2, 20, u8g2.height - 5, t_prog_width, 5);
@@ -287,4 +291,17 @@ static void scroll_text(ScrollData_t* s_d)
         }
     }
     u8g2_SetMaxClipWindow(&u8g2);
+}
+
+static inline void print_uptime()
+{
+    char     buffer[21] = { "Uptime: 000h 00m 00s" };
+    uint32_t uptime_ms = pdTICKS_TO_MS(xTaskGetTickCount());
+
+    memcpy(buffer + 8, u8x8_u8toa(uptime_ms / (60 * 60 * 1000), 3), 3);
+    memcpy(buffer + 13, u8x8_u8toa(uptime_ms / (60 * 1000), 2), 2);
+    memcpy(buffer + 17, u8x8_u8toa((uptime_ms / 1000) % 60, 2), 2);
+
+    u8g2_SetFont(&u8g2, TIME_FONT);
+    u8g2_DrawStr(&u8g2, 0, 35, buffer);
 }
