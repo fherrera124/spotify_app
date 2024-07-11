@@ -4,7 +4,7 @@ dependencies:
   idf: ">=5.0"
   u8g2_hal_esp_idf:
     git: https://github.com/fherrera124/u8g2_hal_esp_idf
-    version: 6a1e0ba7f3de6f2b4cc67226fe4005f56fa624c9
+    version: 5f012ec23a6277368be84e5a8c2d4b3839381bf7
   esp32_rotary_encoder:
     git: https://github.com/fherrera124/esp32_rotary_encoder
     version: 99ffb2de2f26306722d5221fc55514f8beedbd8f

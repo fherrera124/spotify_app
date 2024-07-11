@@ -1,8 +1,7 @@
 /* Includes ------------------------------------------------------------------*/
-#include "esp_log.h"
-
-#include "button.h"
 #include "display.h"
+#include "button.h"
+#include "esp_log.h"
 #include "rotary_encoder.h"
 #include "selection_list.h"
 #include "spotify_client.h"
@@ -92,7 +91,7 @@ static void setup_display()
     u8g2_esp32_hal.bus.spi.mosi = GPIO_NUM_13;
     u8g2_esp32_hal.bus.spi.cs = GPIO_NUM_15;
     u8g2_esp32_hal.bus.spi.flags = SPI_DEVICE_POSITIVE_CS; // https://www.esp32.com/viewtopic.php?p=88613#p88613
-    u8g2_esp32_hal.bus.spi.clock_speed_hz = 100000;
+    u8g2_esp32_hal.bus.spi.clock_speed_hz = 500000;
 
     u8g2_esp32_hal_init(u8g2_esp32_hal);
 
