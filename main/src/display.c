@@ -147,10 +147,10 @@ static void now_playing_page()
                 ESP_LOGW(TAG, "Event: %d", t_evt.type);
                 if (t_evt.type == NO_PLAYER_ACTIVE) {
                     // TODO: get all available devices
-                    continue;
                 } else {
-                    continue;
                 }
+                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                continue;
             }
             ticks_to_wait = 0;
 

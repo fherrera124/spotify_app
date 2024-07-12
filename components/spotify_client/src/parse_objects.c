@@ -136,6 +136,8 @@ SpotifyEvent_t parse_track(const char* js, TrackInfo** track, int initial_state)
         return spotify_evt;
     }
     if (match) {
+        // TODO: manage this event
+        ESP_LOGW(TAG, "Device state changed:\n%s", js);
         spotify_evt.type = DEVICE_STATE_CHANGED;
         return spotify_evt;
     }
