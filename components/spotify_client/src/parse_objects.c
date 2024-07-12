@@ -84,26 +84,63 @@ SpotifyEvent_t parse_track(const char* js, TrackInfo** track, int initial_state)
     }
 
     int num_elem;
-    ERR_CHECK(json_obj_get_array(&jctx, "payloads", &num_elem));
-    // TODO: check if the array is greater than one
-    ERR_CHECK(json_arr_get_object(&jctx, 0));
-    if (json_obj_get_array(&jctx, "events", &num_elem) != OS_SUCCESS) {
-        ESP_LOGW(TAG, "Not an event:\n%s", js);
+    if (json_obj_get_array(&jctx, "payloads", &num_elem) != OS_SUCCESS) {
+        ESP_LOGE(TAG, "\"payloads\" array is missing:\n%s", js);
         spotify_evt.type = UNKNOW;
         return spotify_evt;
     }
-    // TODO: check if the array is greater than one
-    ERR_CHECK(json_arr_get_object(&jctx, 0));
+    if (num_elem == 0) {
+        ESP_LOGE(TAG, "\"payloads\" array is empty:\n%s", js);
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+    }
+    if (num_elem > 1) {
+        ESP_LOGW(TAG, "\"payloads\" array has more than a element:\n%s", js);
+    }
+    if (json_arr_get_object(&jctx, 0) != OS_SUCCESS) {
+        int strlen;
+        if (json_arr_get_strlen(&jctx, 0, &strlen) != OS_SUCCESS) {
+            ESP_LOGE(TAG, "\"payloads\" array first element isn't an object nor a string:\n%s", js);
+        } else {
+            ESP_LOGE(TAG, "\"payloads\" array first element is a string:\n%s", js);
+        }
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+    }
+    if (json_obj_get_array(&jctx, "events", &num_elem) != OS_SUCCESS) {
+        ESP_LOGE(TAG, "\"events\" array is missing:\n%s", js);
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+        // here we can debug and get useful info that we can treat as events
+    }
+    if (num_elem == 0) {
+        ESP_LOGE(TAG, "\"events\" array is empty:\n%s", js);
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+    }
+    if (num_elem > 1) {
+        ESP_LOGW(TAG, "\"events\" array has more than a element:\n%s", js);
+    }
+    if (json_arr_get_object(&jctx, 0) != OS_SUCCESS) {
+        ESP_LOGE(TAG, "\"events\" array first element isn't an object:\n%s", js);
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+    }
     // json_tok_t* t = jctx.cur;
     // printf("token content: %.*s\n", (int)t->end - t->start, js + t->start);
 
     bool match;
-    ERR_CHECK(json_obj_match_string(&jctx, "type", "DEVICE_STATE_CHANGED", &match));
+    if (json_obj_match_string(&jctx, "type", "DEVICE_STATE_CHANGED", &match)) {
+        ESP_LOGE(TAG, "\"type\" key not found or its content is not a string:\n%s", js);
+        spotify_evt.type = UNKNOW;
+        return spotify_evt;
+    }
     if (match) {
         spotify_evt.type = DEVICE_STATE_CHANGED;
         return spotify_evt;
     }
     ERR_CHECK(json_obj_match_string(&jctx, "type", "PLAYER_STATE_CHANGED", &match));
+    // TODO: continue relaxing the code by printing useful info of the error before returning
     if (match) {
         ERR_CHECK(json_obj_get_object(&jctx, "event"));
         ERR_CHECK(json_obj_get_object(&jctx, "state"));
