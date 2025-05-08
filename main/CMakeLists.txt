@@ -1,8 +1,7 @@
+file(GLOB_RECURSE SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
 
-idf_component_register(SRCS "spotify_app.c"
-    "src/display.c"
-    "src/selection_list.c"
-    INCLUDE_DIRS "include"
-    PRIV_INCLUDE_DIRS "src/include"
-    REQUIRES spotify_client protocol_examples_common u8g2_hal_esp_idf
-    PRIV_REQUIRES nvs_flash esp_wifi)
+idf_component_register(SRCS ${SOURCES}
+    INCLUDE_DIRS "ui"
+    PRIV_INCLUDE_DIRS "priv_include")
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -DLV_LVGL_H_INCLUDE_SIMPLE)

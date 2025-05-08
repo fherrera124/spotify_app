@@ -1,23 +1,18 @@
 {
-    "idf.adapterTargetName": "esp32",
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPathWin": "C:\\Users\\fran_\\esp\\v5.4.1\\esp-idf",
+    "idf.pythonInstallPath": "C:\\Users\\fran_\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+    "idf.toolsPathWin": "C:\\Users\\fran_\\.espressif",
+    "idf.portWin": "COM3",
     "idf.flashType": "UART",
-    "files.associations": {
-        "*.COBOL*": "cobol",
-        "*.COB*": "cobol",
-        "*.COBCOPY*": "cobol",
-        "*.COPYBOOK*": "cobol",
-        "*.COPY*": "cobol",
-        "*.PL1*": "pl1",
-        "*.PLI*": "pl1",
-        "*.INC*": "pl1",
-        "*.INCLUDE*": "pl1",
-        "*.JCL*": "jcl",
-        "*.ASM*": "hlasm",
-        "*.ASSEMBLE*": "hlasm",
-        "*.HLASM*": "hlasm",
-        "*.HLA*": "hlasm",
-        "sdkconfig": "c",
-        "*.h*": "c"
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32s3"
     },
-    "idf.portWin": "COM5"
+    "idf.openOcdConfigs": [
+        "board/esp32s3-builtin.cfg"
+    ],
+    "files.associations": {
+        "esp_lcd_touch.h": "c",
+        "nvs_flash.h": "c"
+    }
 }

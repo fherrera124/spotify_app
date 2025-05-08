@@ -1,0 +1,1 @@
+[how to get discord token](https://www.reddit.com/r/Discord_selfbots/comments/1hhojww/how_to_get_discord_token/)

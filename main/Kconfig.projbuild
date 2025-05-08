@@ -1,0 +1,16 @@
+menu "Example Configuration"
+
+    choice EXAMPLE_DISPLAY_ROTATION
+        prompt "Select rotation"
+        default EXAMPLE_DISPLAY_ROTATION_NONE
+        config EXAMPLE_DISPLAY_ROTATION_NONE
+            bool "Rotation 0"
+        config EXAMPLE_DISPLAY_ROTATION_90
+            bool "Rotation 90"
+        config EXAMPLE_DISPLAY_ROTATION_180
+            bool "Rotation 180"
+        config EXAMPLE_DISPLAY_ROTATION_270
+            bool "Rotation 270"
+    endchoice
+
+endmenu
