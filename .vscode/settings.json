@@ -13,6 +13,12 @@
     ],
     "files.associations": {
         "esp_lcd_touch.h": "c",
-        "nvs_flash.h": "c"
+        "nvs_flash.h": "c",
+        "display.h": "c",
+        "esp_bsp.h": "c",
+        "spotify_client.h": "c",
+        "chrono": "c",
+        "text_encoding": "c",
+        "typeinfo": "c"
     }
 }

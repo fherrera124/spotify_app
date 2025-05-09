@@ -17,6 +17,9 @@
 /* Locally scoped variables --------------------------------------------------*/
 static const char *TAG = "SPOTIFY_APP";
 
+/* Private function prototypes -----------------------------------------------*/
+static void now_playing_screen();
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "[APP] Startup..");
@@ -28,15 +31,7 @@ void app_main(void)
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
         .buffer_size = EXAMPLE_LCD_QSPI_H_RES * EXAMPLE_LCD_QSPI_V_RES,
-#if CONFIG_EXAMPLE_DISPLAY_ROTATION_90
         .rotate = LV_DISP_ROT_90,
-#elif CONFIG_EXAMPLE_DISPLAY_ROTATION_270
-        .rotate = LV_DISP_ROT_270,
-#elif CONFIG_EXAMPLE_DISPLAY_ROTATION_180
-        .rotate = LV_DISP_ROT_180,
-#elif CONFIG_EXAMPLE_DISPLAY_ROTATION_0
-        .rotate = LV_DISP_ROT_NONE,
-#endif
     };
 
     bsp_display_start_with_config(&cfg);
@@ -56,101 +51,102 @@ void app_main(void)
      * examples/protocols/README.md for more information about this function.
      */
     ESP_ERROR_CHECK(example_connect());
+
+    // Initialize the Spotify client
     ESP_ERROR_CHECK(spotify_client_init(5));
 
-    // obtain the user playlists
-    List *playlists = spotify_user_playlists();
-    if (playlists->count > 0)
-    {
-        ESP_LOGI(TAG, "User playlists:");
-        Node *playlist_n = playlists->first;
-        while (playlist_n)
-        {
-            PlaylistItem_t *data = playlist_n->data;
-            ESP_LOGI(TAG, "Playlist name: %s", data->name);
-            ESP_LOGI(TAG, "Playlist uri: %s", data->uri);
-            playlist_n = playlist_n->next;
-        }
-        spotify_free_nodes(playlists);
-    }
-    else
-    {
-        ESP_LOGW(TAG, "No playlists found");
-    }
-    assert(playlists->count == 0);
+    now_playing_screen();
 
-    // obtain the available devices
-    List *available_devices = spotify_available_devices();
-    if (available_devices->count > 0)
-    {
-        ESP_LOGI(TAG, "Available devices:");
-        Node *device_n = available_devices->first;
-        while (device_n)
-        {
-            DeviceItem_t *data = device_n->data;
-            ESP_LOGI(TAG, "Device name: %s", data->name);
-            ESP_LOGI(TAG, "Device id: %s", data->id);
-            device_n = device_n->next;
-        }
-        spotify_free_nodes(available_devices);
-    }
-    else
-    {
-        ESP_LOGW(TAG, "No available devices found");
-    }
-    assert(available_devices->count == 0);
+}
+
+/* Private functions ---------------------------------------------------------*/
+static void now_playing_screen()
+{
+
+    static TrackInfo track = {.artists.type = STRING_LIST};
+    assert(track.name = strdup("No device playing..."));
+
+    SpotifyEvent_t event;
+    TickType_t event_stamp = 0;
+    char t_time[6] = {"00:00"};
 
     // enable the player and wait for events
     spotify_dispatch_event(ENABLE_PLAYER_EVENT);
-    SpotifyEvent_t event;
-    TrackInfo track = {.artists.type = STRING_LIST};
-    assert(track.name = calloc(1, 1));
+
+    // in the first iteration we wait forever
+    TickType_t ticks_to_wait = portMAX_DELAY;
+    uint32_t percent = 0;
     while (1)
     {
-        spotify_wait_event(&event, portMAX_DELAY);
-        if (event.type == NEW_TRACK)
+        /* Wait for track event ------------------------------------------------------*/
+        if (pdPASS == spotify_wait_event(&event, ticks_to_wait))
         {
-            ESP_LOGI(TAG, "#");
-            spotify_clear_track(&track);
-            spotify_clone_track(&track, (TrackInfo *)event.payload);
-            ESP_LOGI(TAG, "Track: \"%s\"", track.name);
-            ESP_LOGI(TAG, "Album: \"%s\"", track.album);
-            Node *artist_n = track.artists.first;
-            if (track.artists.count == 1)
+            event_stamp = xTaskGetTickCount();
+            // just to be sure...
+            if (ticks_to_wait != 0 && event.type != NEW_TRACK)
             {
-                ESP_LOGI(TAG, "Artist: \"%s\"", (char *)artist_n->data);
-            }
-            else
-            {
-                ESP_LOGI(TAG, "Artists:");
-                while (artist_n)
+                ESP_LOGW(TAG, "Still waiting for the first event of a track");
+                ESP_LOGW(TAG, "Event: %d", event.type);
+                if (event.type == NO_PLAYER_ACTIVE)
                 {
-                    ESP_LOGI(TAG, " \"%s\"", (char *)artist_n->data);
-                    artist_n = artist_n->next;
-                }
-            }
-        }
-        else if (event.type == SAME_TRACK)
-        {
-            TrackInfo *track_updated = event.payload;
-            if (track.isPlaying != track_updated->isPlaying)
-            {
-                track.isPlaying = track_updated->isPlaying;
-                if (track.isPlaying)
-                {
-                    ESP_LOGW(TAG, "Unpaused");
+                    // TODO: get all available devices
                 }
                 else
                 {
-                    ESP_LOGW(TAG, "Paused");
                 }
+                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                continue;
             }
-            if (track_updated->progress_ms != track.progress_ms)
+            ticks_to_wait = 0;
+
+            switch (event.type)
             {
-                track.progress_ms = track_updated->progress_ms;
-                ESP_LOGW(TAG, "progress: %lld", track.progress_ms);
+            case NEW_TRACK:
+                spotify_clear_track(&track);
+                spotify_clone_track(&track, (TrackInfo *)event.payload);
+                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                percent = (track.progress_ms * 100) / track.duration_ms;
+                if (percent > 100)
+                    percent = 100;
+                bsp_display_lock(0);
+                lv_label_set_text(ui_Track, track.name);
+                bsp_display_unlock();
+                break;
+            case SAME_TRACK:
+                TrackInfo *t_updated = event.payload;
+                track.isPlaying = t_updated->isPlaying;
+                track.progress_ms = t_updated->progress_ms;
+                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                percent = (track.progress_ms * 100) / track.duration_ms;
+                if (percent > 100)
+                    percent = 100;
+                break;
+            case NO_PLAYER_ACTIVE:
+                // TODO: get all devices available
+                break;
+            default:
+                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                continue;
             }
         }
-        spotify_dispatch_event(DATA_PROCESSED_EVENT);
+        else
+        { /* expired */
+            if (track.isPlaying)
+            {
+                time_t t_progress_ms = track.progress_ms + pdTICKS_TO_MS(xTaskGetTickCount() - event_stamp);
+                percent = (t_progress_ms * 100) / track.duration_ms;
+                if (percent > 100)
+                    percent = 100;
+            }
+        }
+
+        /* TODO: Track artists */
+
+        /* Time progress */
+        // t_time
+
+        bsp_display_lock(0); // o lvgl_acquire()
+        lv_bar_set_value(ui_ProgressBar, percent, LV_ANIM_OFF);
+        bsp_display_unlock(); // o lvgl_release()
     }
 }
