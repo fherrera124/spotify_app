@@ -26,6 +26,7 @@ typedef enum {
     DATA_PROCESSED_EVENT,
     DO_PAUSE_EVENT,
     DO_PLAY_EVENT,
+    PAUSE_UNPAUSE_EVENT,
     DO_PREVIOUS_EVENT,
     DO_NEXT_EVENT,
 } SendEvent_t;

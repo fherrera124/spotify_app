@@ -45,6 +45,7 @@ typedef struct {
 typedef enum {
     PAUSE = DO_PAUSE,
     PLAY = DO_PLAY,
+    PAUSE_UNPAUSE = DO_PAUSE_UNPAUSE,
     PREVIOUS = DO_PREVIOUS,
     NEXT = DO_NEXT,
     CHANGE_VOLUME,
@@ -169,6 +170,9 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
         break;
     case DO_PAUSE_EVENT:
         xEventGroupSetBits(event_group, DO_PAUSE);
+        break;
+    case PAUSE_UNPAUSE_EVENT:
+        xEventGroupSetBits(event_group, DO_PAUSE_UNPAUSE);
         break;
     case DO_NEXT_EVENT:
         xEventGroupSetBits(event_group, DO_NEXT);
@@ -342,7 +346,7 @@ static void player_task(void* pvParameters)
     int            enabled = 0;
     SpotifyEvent_t spotify_evt;
     EventBits_t    uxBits;
-    int            player_bits = DO_PLAY | DO_PAUSE | DO_PREVIOUS | DO_NEXT;
+    int            player_bits = DO_PLAY | DO_PAUSE | DO_PREVIOUS | DO_NEXT | DO_PAUSE_UNPAUSE;
     while (1) {
         uxBits = xEventGroupWaitBits(
             event_group,
@@ -558,6 +562,14 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void* payload, HttpStatus_Code*
         http_client.method = HTTP_METHOD_PUT;
         http_client.endpoint = PLAYERURL(PLAY_TRACK);
         break;
+    case PAUSE_UNPAUSE:
+        http_client.method = HTTP_METHOD_PUT;
+        if (track_info->isPlaying) {
+            http_client.endpoint = PLAYERURL(PAUSE_TRACK);
+        } else {
+            http_client.endpoint = PLAYERURL(PLAY_TRACK);
+        }
+        break;
     case PREVIOUS:
         http_client.method = HTTP_METHOD_POST;
         http_client.endpoint = PLAYERURL(PREV_TRACK);
@@ -596,6 +608,17 @@ retry:
     }
     if (status_code) {
         *status_code = s_code;
+    }
+    if (s_code == HttpStatus_Forbidden) {
+        if (cmd == PAUSE_UNPAUSE) {
+            if (strcmp(http_client.endpoint, PLAYERURL(PAUSE_TRACK)) == 0) {
+                http_client.endpoint = PLAYERURL(PLAY_TRACK);
+            } else {
+                http_client.endpoint = PLAYERURL(PAUSE_TRACK);
+            }
+            esp_http_client_set_url(http_client.handle, http_client.endpoint);
+            goto retry;
+        }
     }
     esp_http_client_close(http_client.handle);
     RELEASE_LOCK(http_buf_lock);
@@ -659,7 +682,7 @@ static void playlists_handler_cb(char* dest, esp_http_client_event_t* evt)
                     // End of playlist
                     dest[chars_stored] = '\0';
                     ESP_LOGD(TAG, "Playlist (len: %d):\n%s", strlen(dest), dest);
-                    PlaylistItem_t* item = malloc(sizeof(item));
+                    PlaylistItem_t* item = malloc(sizeof(*item));
                     assert(item);
                     parse_playlist(http_buffer, item);
                     assert(spotify_append_item_to_list(&playlists, (void*)item));

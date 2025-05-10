@@ -35,6 +35,7 @@ extern "C" {
 #define DO_PAUSE            (1 << 8)
 #define DO_NEXT             (1 << 9)
 #define DO_PREVIOUS         (1 << 10)
+#define DO_PAUSE_UNPAUSE    (1 << 11)
 
 /* Exported types ------------------------------------------------------------*/
 typedef struct

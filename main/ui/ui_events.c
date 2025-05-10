@@ -13,7 +13,7 @@ void prevFn(lv_event_t * e)
 
 void pauseUnpauseFn(lv_event_t * e)
 {
-	// Your code here
+	spotify_dispatch_event(PAUSE_UNPAUSE_EVENT);
 }
 
 void nextFn(lv_event_t * e)

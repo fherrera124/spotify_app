@@ -18,7 +18,7 @@ List* spotify_create_empty_list(NodeType_t type)
     default:
         return NULL;
     }
-    List* list = calloc(sizeof(List), 1);
+    List* list = calloc(1, sizeof(List));
     if (!list) {
         return NULL;
     }
@@ -88,7 +88,7 @@ void spotify_free_nodes(List* list)
 /* Private functions ---------------------------------------------------------*/
 Node* create_node(void* item)
 {
-    Node* node = malloc(sizeof(node));
+    Node* node = malloc(sizeof(*node));
     if (node) {
         node->data = item;
         node->next = NULL;
