@@ -42,10 +42,16 @@ typedef struct
 
 typedef struct
 {
+    char* name;
+    char* url_cover;
+} Album;
+
+typedef struct
+{
     char   id[30];
     char*  name;
     List   artists;
-    char*  album;
+    Album  album;
     time_t duration_ms;
     time_t progress_ms;
     bool   isPlaying;

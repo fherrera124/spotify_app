@@ -302,24 +302,19 @@ retry:
 
 void spotify_clear_track(TrackInfo* track)
 {
+    free_track(track);
     track->id[0] = 0;
-    free(track->name);
-    free(track->album);
     track->isPlaying = false;
     track->progress_ms = 0;
     track->duration_ms = 0;
-    spotify_free_nodes(&track->artists);
-    free(track->device.id);
-    free(track->device.name);
-    free(track->device.type);
-    strcpy(track->device.volume_percent, "-1");
 }
 
 esp_err_t spotify_clone_track(TrackInfo* dest, const TrackInfo* src)
 {
     strcpy(dest->id, src->id);
     dest->name = strdup(src->name);
-    dest->album = strdup(src->album);
+    dest->album.name = strdup(src->album.name);
+    dest->album.url_cover = strdup(src->album.url_cover);
     dest->isPlaying = src->isPlaying;
     dest->progress_ms = src->progress_ms;
     dest->duration_ms = src->duration_ms;
@@ -495,7 +490,8 @@ static esp_err_t _http_event_handler(esp_http_client_event_t* evt)
 static inline void free_track(TrackInfo* track)
 {
     free(track->name);
-    free(track->album);
+    free(track->album.name);
+    free(track->album.url_cover);
     spotify_free_nodes(&track->artists);
     free(track->device.id);
     free(track->device.name);

@@ -181,7 +181,20 @@ SpotifyEvent_t parse_track(const char* js, TrackInfo** track, int initial_state)
             }
             ERR_CHECK(json_obj_leave_array(&jctx));
             ERR_CHECK(json_obj_get_object(&jctx, "album"));
-            ERR_CHECK(json_obj_dup_string(&jctx, "name", &(*track)->album));
+            ERR_CHECK(json_obj_dup_string(&jctx, "name", &(*track)->album.name));
+            ERR_CHECK(json_obj_get_array(&jctx, "images", &num_elem));
+            int h;
+            for (int i = 0; i < num_elem; i++) {
+                ERR_CHECK(json_arr_get_object(&jctx, i));
+                ERR_CHECK(json_obj_get_int(&jctx, "height", &h));
+                if (h == 300) {
+                    ERR_CHECK(json_obj_dup_string(&jctx, "url", &(*track)->album.url_cover));
+                    ERR_CHECK(json_arr_leave_object(&jctx));
+                    break;
+                }
+                ERR_CHECK(json_arr_leave_object(&jctx));
+            }
+            ERR_CHECK(json_obj_leave_array(&jctx));
             ERR_CHECK(json_obj_leave_object(&jctx));
             ERR_CHECK(json_obj_leave_object(&jctx));
             ERR_CHECK(json_obj_get_int64(&jctx, "progress_ms", &(*track)->progress_ms));
