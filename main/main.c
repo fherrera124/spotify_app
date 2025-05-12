@@ -13,9 +13,30 @@
 #include "esp_bsp.h"
 #include "display.h"
 #include "ui/ui.h"
+#include "decode_jpg.h"
+#include "jpeg_decoder.h"
+
+/* Private macro -------------------------------------------------------------*/
+#define COVER_W 300
+#define COVER_H 300
+// we will scale the image to half size on the display
+#define COVER_W_HALF (COVER_W / 2)
+#define COVER_H_HALF (COVER_H / 2)
 
 /* Locally scoped variables --------------------------------------------------*/
 static const char *TAG = "SPOTIFY_APP";
+
+static lv_img_dsc_t pic_img_dsc = {
+    .header = {
+        .cf = LV_IMG_CF_TRUE_COLOR,
+        .always_zero = 0,
+        .reserved = 0,
+        .w = COVER_W_HALF,
+        .h = COVER_H_HALF,
+    },
+    .data_size = COVER_W_HALF * COVER_H_HALF * 2,
+    .data = NULL,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 static void now_playing_screen();
@@ -56,12 +77,29 @@ void app_main(void)
     ESP_ERROR_CHECK(spotify_client_init(5));
 
     now_playing_screen();
-
 }
+
+static uint16_t *pixels = NULL;
 
 /* Private functions ---------------------------------------------------------*/
 static void now_playing_screen()
 {
+
+    if (!pixels)
+    {
+        // Alocate pixel memory. Each line is an array of IMAGE_W 16-bit pixels; the `*pixels` array itself contains pointers to these lines.
+        pixels = heap_caps_calloc((COVER_W_HALF * COVER_H_HALF), sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+        if (!pixels)
+        {
+            ESP_LOGE(TAG, "Failed to alloc buffer");
+            return;
+        }
+    }
+
+    pic_img_dsc.data = (uint8_t *)pixels;
+    bsp_display_lock(0);
+    lv_img_set_src(ui_CoverImage, &pic_img_dsc);
+    bsp_display_unlock();
 
     static TrackInfo track = {.artists.type = STRING_LIST};
     assert(track.name = strdup("No device playing..."));
@@ -111,6 +149,20 @@ static void now_playing_screen()
                 bsp_display_lock(0);
                 lv_label_set_text(ui_Track, track.name);
                 bsp_display_unlock();
+                uint8_t *buf;
+                size_t buf_size = COVER_W * COVER_H;
+                uint32_t jpg_size = fetch_album_cover(&track, &buf, buf_size);
+                if ((int)jpg_size <= 0)
+                {
+                    ESP_LOGE(TAG, "Failed to fetch album cover");
+                    //black image
+                    memset(pixels, 0, COVER_W_HALF * COVER_H_HALF * sizeof(uint16_t));
+                } else {
+                    decode_image(pixels, buf, jpg_size, COVER_W_HALF, COVER_H_HALF, JPEG_IMAGE_SCALE_1_2);
+                }
+                bsp_display_lock(0);
+                lv_obj_invalidate(ui_CoverImage);
+                bsp_display_unlock();
                 break;
             case SAME_TRACK:
                 TrackInfo *t_updated = event.payload;
@@ -145,8 +197,8 @@ static void now_playing_screen()
         /* Time progress */
         // t_time
 
-        bsp_display_lock(0); // o lvgl_acquire()
+        bsp_display_lock(0);
         lv_bar_set_value(ui_ProgressBar, percent, LV_ANIM_OFF);
-        bsp_display_unlock(); // o lvgl_release()
+        bsp_display_unlock();
     }
 }

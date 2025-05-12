@@ -106,6 +106,10 @@ void default_ws_handler_cb(void* handler_args, esp_event_base_t base, int32_t ev
     }
 }
 
+void dummy_http_handler_cb(char* dest, esp_http_client_event_t* evt) {
+    return;
+}
+
 /* Private functions ---------------------------------------------------------*/
 size_t static inline memcpy_trimmed(char* dest, int dest_size, const char* src, size_t src_len)
 {

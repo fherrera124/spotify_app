@@ -72,3 +72,4 @@ List*      spotify_user_playlists();
 List*      spotify_available_devices();
 void       spotify_clear_track(TrackInfo* track);
 esp_err_t  spotify_clone_track(TrackInfo* dest, const TrackInfo* src);
+ssize_t    fetch_album_cover(TrackInfo *track, uint8_t **out_buf, size_t buf_size);

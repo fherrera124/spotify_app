@@ -16,9 +16,9 @@ extern "C" {
 #include "ui_events.h"
 
 
-// SCREEN: ui_Screen1
-void ui_Screen1_screen_init(void);
-extern lv_obj_t * ui_Screen1;
+// SCREEN: ui_PlayerScreen
+void ui_PlayerScreen_screen_init(void);
+extern lv_obj_t * ui_PlayerScreen;
 void ui_event_ProgressBar(lv_event_t * e);
 extern lv_obj_t * ui_ProgressBar;
 extern lv_obj_t * ui_Container1;
@@ -29,6 +29,9 @@ extern lv_obj_t * ui_PauseUnpauseBtn;
 void ui_event_NextBtn(lv_event_t * e);
 extern lv_obj_t * ui_NextBtn;
 extern lv_obj_t * ui_Track;
+extern lv_obj_t * ui_Artists;
+extern lv_obj_t * ui_CoverContainer;
+extern lv_obj_t * ui_CoverImage;
 // CUSTOM VARIABLES
 
 // EVENTS

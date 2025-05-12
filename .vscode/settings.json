@@ -20,6 +20,9 @@
         "chrono": "c",
         "text_encoding": "c",
         "typeinfo": "c",
-        "ui.h": "c"
+        "ui.h": "c",
+        "jpeg_decoder.h": "c",
+        "decode_jpg.h": "c",
+        "cstdint": "c"
     }
 }
