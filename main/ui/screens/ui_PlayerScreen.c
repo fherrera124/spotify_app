@@ -9,102 +9,128 @@ void ui_PlayerScreen_screen_init(void)
 {
     ui_PlayerScreen = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_PlayerScreen, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_bg_color(ui_PlayerScreen, lv_color_hex(0x0A9B9B), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_PlayerScreen, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(ui_PlayerScreen, lv_color_hex(0x1A1A1A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui_PlayerScreen, LV_GRAD_DIR_VER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     lv_obj_set_style_bg_color(ui_PlayerScreen, lv_color_hex(0x444545), LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_PlayerScreen, 255, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_grad_color(ui_PlayerScreen, lv_color_hex(0x222222), LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_grad_dir(ui_PlayerScreen, LV_GRAD_DIR_VER, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
 
-    ui_ProgressBar = lv_bar_create(ui_PlayerScreen);
-    lv_bar_set_value(ui_ProgressBar, 25, LV_ANIM_OFF);
-    lv_bar_set_start_value(ui_ProgressBar, 0, LV_ANIM_OFF);
-    lv_obj_set_width(ui_ProgressBar, 470);
-    lv_obj_set_height(ui_ProgressBar, 12);
-    lv_obj_set_x(ui_ProgressBar, 0);
-    lv_obj_set_y(ui_ProgressBar, 97);
-    lv_obj_set_align(ui_ProgressBar, LV_ALIGN_CENTER);
+    ui_MainContainer = lv_obj_create(ui_PlayerScreen);
+    lv_obj_remove_style_all(ui_MainContainer);
+    lv_obj_set_width(ui_MainContainer, 480);
+    lv_obj_set_height(ui_MainContainer, 166);
+    lv_obj_set_x(ui_MainContainer, 0);
+    lv_obj_set_y(ui_MainContainer, 46);
+    lv_obj_set_align(ui_MainContainer, LV_ALIGN_CENTER);
+    lv_obj_clear_flag(ui_MainContainer, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
-    ui_Container1 = lv_obj_create(ui_PlayerScreen);
-    lv_obj_remove_style_all(ui_Container1);
-    lv_obj_set_width(ui_Container1, 470);
-    lv_obj_set_height(ui_Container1, 53);
-    lv_obj_set_x(ui_Container1, 0);
-    lv_obj_set_y(ui_Container1, 129);
-    lv_obj_set_align(ui_Container1, LV_ALIGN_CENTER);
-    lv_obj_clear_flag(ui_Container1, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_Container1, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_Container1, lv_color_hex(0x319A07), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Container1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_ButtonsContainer = lv_obj_create(ui_MainContainer);
+    lv_obj_remove_style_all(ui_ButtonsContainer);
+    lv_obj_set_width(ui_ButtonsContainer, 310);
+    lv_obj_set_height(ui_ButtonsContainer, 51);
+    lv_obj_set_x(ui_ButtonsContainer, 80);
+    lv_obj_set_y(ui_ButtonsContainer, 39);
+    lv_obj_set_align(ui_ButtonsContainer, LV_ALIGN_CENTER);
+    lv_obj_clear_flag(ui_ButtonsContainer, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(ui_ButtonsContainer, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_ButtonsContainer, lv_color_hex(0x319A07), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_ButtonsContainer, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_PrevBtn = lv_btn_create(ui_Container1);
-    lv_obj_set_width(ui_PrevBtn, 50);
-    lv_obj_set_height(ui_PrevBtn, 50);
-    lv_obj_set_x(ui_PrevBtn, -150);
+    ui_PrevBtn = lv_btn_create(ui_ButtonsContainer);
+    lv_obj_set_width(ui_PrevBtn, 40);
+    lv_obj_set_height(ui_PrevBtn, 40);
+    lv_obj_set_x(ui_PrevBtn, -127);
     lv_obj_set_y(ui_PrevBtn, 0);
     lv_obj_set_align(ui_PrevBtn, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_PrevBtn, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_PrevBtn, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_PrevBtn, 60, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_PauseUnpauseBtn = lv_btn_create(ui_Container1);
-    lv_obj_set_width(ui_PauseUnpauseBtn, 50);
-    lv_obj_set_height(ui_PauseUnpauseBtn, 50);
+    ui_PauseUnpauseBtn = lv_btn_create(ui_ButtonsContainer);
+    lv_obj_set_width(ui_PauseUnpauseBtn, 40);
+    lv_obj_set_height(ui_PauseUnpauseBtn, 40);
     lv_obj_set_align(ui_PauseUnpauseBtn, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_PauseUnpauseBtn, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_PauseUnpauseBtn, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_PauseUnpauseBtn, 60, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_NextBtn = lv_btn_create(ui_Container1);
-    lv_obj_set_width(ui_NextBtn, 50);
-    lv_obj_set_height(ui_NextBtn, 50);
-    lv_obj_set_x(ui_NextBtn, 150);
+    ui_NextBtn = lv_btn_create(ui_ButtonsContainer);
+    lv_obj_set_width(ui_NextBtn, 40);
+    lv_obj_set_height(ui_NextBtn, 40);
+    lv_obj_set_x(ui_NextBtn, 123);
     lv_obj_set_y(ui_NextBtn, 0);
     lv_obj_set_align(ui_NextBtn, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_NextBtn, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_NextBtn, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_NextBtn, 60, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_Track = lv_label_create(ui_PlayerScreen);
+    ui_ProgressBar = lv_bar_create(ui_MainContainer);
+    lv_bar_set_value(ui_ProgressBar, 25, LV_ANIM_OFF);
+    lv_bar_set_start_value(ui_ProgressBar, 0, LV_ANIM_OFF);
+    lv_obj_set_width(ui_ProgressBar, 470);
+    lv_obj_set_height(ui_ProgressBar, 12);
+    lv_obj_set_x(ui_ProgressBar, 0);
+    lv_obj_set_y(ui_ProgressBar, 72);
+    lv_obj_set_align(ui_ProgressBar, LV_ALIGN_CENTER);
+    lv_obj_set_style_radius(ui_ProgressBar, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_ProgressBar, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_ProgressBar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(ui_ProgressBar, lv_color_hex(0x3E3E3E), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui_ProgressBar, LV_GRAD_DIR_HOR, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_color(ui_ProgressBar, lv_color_hex(0x0B9DD7), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_opa(ui_ProgressBar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_width(ui_ProgressBar, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_pad(ui_ProgressBar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_color(ui_ProgressBar, lv_color_hex(0x077C98), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(ui_ProgressBar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui_ProgressBar, 50, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_spread(ui_ProgressBar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_radius(ui_ProgressBar, 4, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_ProgressBar, lv_color_hex(0x2F97E0), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_ProgressBar, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(ui_ProgressBar, lv_color_hex(0x12B7A5), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui_ProgressBar, LV_GRAD_DIR_HOR, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+
+    ui_Track = lv_label_create(ui_MainContainer);
     lv_obj_set_width(ui_Track, 310);
     lv_obj_set_height(ui_Track, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_Track, 80);
-    lv_obj_set_y(ui_Track, -51);
+    lv_obj_set_y(ui_Track, -50);
     lv_obj_set_align(ui_Track, LV_ALIGN_CENTER);
     lv_label_set_long_mode(ui_Track, LV_LABEL_LONG_SCROLL);
     lv_label_set_text(ui_Track, "");
     lv_obj_set_style_text_font(ui_Track, &lv_font_montserrat_42, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_Artists = lv_label_create(ui_PlayerScreen);
+    ui_Artists = lv_label_create(ui_MainContainer);
     lv_obj_set_width(ui_Artists, 310);
     lv_obj_set_height(ui_Artists, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_Artists, 80);
-    lv_obj_set_y(ui_Artists, 2);
+    lv_obj_set_y(ui_Artists, 0);
     lv_obj_set_align(ui_Artists, LV_ALIGN_CENTER);
     lv_label_set_long_mode(ui_Artists, LV_LABEL_LONG_SCROLL);
     lv_label_set_text(ui_Artists, "Artists...");
     lv_obj_set_style_text_font(ui_Artists, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_CoverContainer = lv_obj_create(ui_PlayerScreen);
-    lv_obj_remove_style_all(ui_CoverContainer);
-    lv_obj_set_width(ui_CoverContainer, 150);
-    lv_obj_set_height(ui_CoverContainer, 150);
-    lv_obj_set_x(ui_CoverContainer, -155);
-    lv_obj_set_y(ui_CoverContainer, -3);
-    lv_obj_set_align(ui_CoverContainer, LV_ALIGN_CENTER);
-    lv_obj_clear_flag(ui_CoverContainer, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_CoverContainer, 5, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_CoverImage = lv_img_create(ui_CoverContainer);
+    ui_CoverImage = lv_img_create(ui_MainContainer);
     lv_obj_set_width(ui_CoverImage, 150);
     lv_obj_set_height(ui_CoverImage, 150);
+    lv_obj_set_x(ui_CoverImage, -158);
+    lv_obj_set_y(ui_CoverImage, -9);
     lv_obj_set_align(ui_CoverImage, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_CoverImage, LV_OBJ_FLAG_ADV_HITTEST);     /// Flags
     lv_obj_clear_flag(ui_CoverImage, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(ui_CoverImage, 15, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(ui_CoverImage, true, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_CoverImage, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_add_event_cb(ui_ProgressBar, ui_event_ProgressBar, LV_EVENT_ALL, NULL);
     lv_obj_add_event_cb(ui_PrevBtn, ui_event_PrevBtn, LV_EVENT_ALL, NULL);
     lv_obj_add_event_cb(ui_PauseUnpauseBtn, ui_event_PauseUnpauseBtn, LV_EVENT_ALL, NULL);
     lv_obj_add_event_cb(ui_NextBtn, ui_event_NextBtn, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(ui_ProgressBar, ui_event_ProgressBar, LV_EVENT_ALL, NULL);
 
 }

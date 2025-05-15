@@ -26,21 +26,25 @@
 #define RETRIES_ERR_CONN 3
 #define SPRINTF_BUF_SIZE 100
 
-#define PREPARE_CLIENT(state, AUTH, TYPE)                                  \
-    esp_http_client_set_url(http_client.handle, http_client.endpoint);     \
-    esp_http_client_set_method(http_client.handle, http_client.method);    \
-    esp_http_client_set_header(http_client.handle, "Authorization", AUTH); \
-    esp_http_client_set_header(http_client.handle, "Content-Type", TYPE)
+#define PREPARE_CLIENT(AUTH, TYPE)                                             \
+    esp_http_client_set_url(http_client.handle, http_client.endpoint);         \
+    esp_http_client_set_method(http_client.handle, http_client.method);        \
+    if (AUTH != NULL)                                                          \
+    {                                                                          \
+        esp_http_client_set_header(http_client.handle, "Authorization", AUTH); \
+    }                                                                          \
+    if (TYPE != NULL)                                                          \
+    {                                                                          \
+        esp_http_client_set_header(http_client.handle, "Content-Type", TYPE);  \
+    }
 
 /* Private types -------------------------------------------------------------*/
-typedef void (*handler_cb_t)(char *, esp_http_client_event_t *);
-
 typedef struct
 {
     esp_http_client_handle_t handle; /*!<*/
     const char *endpoint;            /*!<*/
     esp_http_client_method_t method; /*!<*/
-    handler_cb_t handler_cb;         /*!< Callback function to handle http events */
+    http_event_handle_cb handler_cb; /*!< Callback function to handle http events */
 } HttpClient_data_t;
 
 typedef enum
@@ -56,8 +60,8 @@ typedef enum
 
 /* Locally scoped variables --------------------------------------------------*/
 static const char *TAG = "spotify_client";
-EventGroupHandle_t event_group = NULL;
-static char http_buffer[MAX_HTTP_BUFFER];
+static EventGroupHandle_t event_group = NULL;
+static char *http_buffer = NULL;
 static char ws_buffer[4096];
 static char sprintf_buf[SPRINTF_BUF_SIZE];
 static SemaphoreHandle_t http_buf_lock = NULL; /* Mutex to manage access to the http client buffer */
@@ -72,6 +76,7 @@ TrackInfo *track_info = &(TrackInfo){.artists.type = STRING_LIST}; /* pointer to
 by the the COMPOUND LITERAL expression "(TrackInfo) { 0 }". NOTE: Although the syntax of a compound
 literal is similar to a cast, the important distinction is that a cast is a non-lvalue expression
 while a compound literal is an lvalue */
+http_data_t http_data = {0};
 
 /* Globally scoped variables definitions -------------------------------------*/
 
@@ -81,22 +86,36 @@ extern const char certs_pem_end[] asm("_binary_certs_pem_end");
 
 /* Private function prototypes -----------------------------------------------*/
 static esp_err_t get_access_token();
-static esp_err_t _http_event_handler(esp_http_client_event_t *evt);
+static esp_err_t http_event_handler_wrapper(esp_http_client_event_t *evt);
 static void player_task(void *pvParameters);
 static esp_err_t confirm_ws_session(char *conn_id);
 static void free_track(TrackInfo *track_info);
 static esp_err_t http_retries_available(esp_err_t err);
 static void debug_mem();
-static void playlists_handler_cb(char *dest, esp_http_client_event_t *evt);
+static esp_err_t playlists_handler_cb(esp_http_client_event_t *evt);
 static bool access_token_empty();
 static esp_err_t player_cmd(PlayerCommand_t cmd, void *payload, HttpStatus_Code *status_code);
 
 /* Exported functions --------------------------------------------------------*/
 esp_err_t spotify_client_init(UBaseType_t priority)
 {
+    if (http_buffer == NULL)
+    {
+        http_buffer = (char *)calloc(1, MAX_HTTP_BUFFER);
+        if (!http_buffer)
+        {
+            spotify_client_deinit();
+            return ESP_FAIL;
+        }
+    }
+
+    http_data.buffer = (uint8_t *)http_buffer;
+    http_data.buffer_size = MAX_HTTP_BUFFER;
+
     static esp_http_client_config_t http_cfg = {
         .url = "https://api.spotify.com/v1",
-        .event_handler = _http_event_handler,
+        .user_data = &http_data,
+        .event_handler = http_event_handler_wrapper,
         .cert_pem = certs_pem_start,
         .buffer_size_tx = DEFAULT_HTTP_BUF_SIZE + 256,
     };
@@ -107,12 +126,19 @@ esp_err_t spotify_client_init(UBaseType_t priority)
         .ping_interval_sec = 30,
     };
 
-    assert(track_info->name = calloc(1, 1));
+    track_info->name = calloc(1, 1);
+    if (!track_info->name)
+    {
+        ESP_LOGE(TAG, "Error allocating memory for track name");
+        spotify_client_deinit();
+        return ESP_FAIL;
+    }
 
     http_client.handle = esp_http_client_init(&http_cfg);
     if (!http_client.handle)
     {
         ESP_LOGE(TAG, "Error on esp_http_client_init()");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
 
@@ -120,13 +146,15 @@ esp_err_t spotify_client_init(UBaseType_t priority)
     if (!ws_client_handle)
     {
         ESP_LOGE(TAG, "Error on esp_websocket_client_init()");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
 
     http_buf_lock = xSemaphoreCreateMutex();
     if (!http_buf_lock)
     {
-        ESP_LOGE(TAG, "Error on xSemaphoreCreateMutex()");
+        ESP_LOGE(TAG, "Failed to create mutex");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
 
@@ -134,26 +162,59 @@ esp_err_t spotify_client_init(UBaseType_t priority)
     if (!event_queue)
     {
         ESP_LOGE(TAG, "Failed to create queue for events");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
+    http_client.handler_cb = json_http_handler_cb;
 
-    http_client.handler_cb = default_http_handler_cb;
-
-    event_group = xEventGroupCreate();
-
-    if (!event_group)
+    if (!(event_group = xEventGroupCreate()))
     {
         ESP_LOGE("EventGroup", "Failed to create event group");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
 
     int res = xTaskCreate(player_task, "player_task", 4096, NULL, priority, NULL);
     if (!res)
     {
-        ESP_LOGE(TAG, "Error creating task");
+        ESP_LOGE(TAG, "Failed to create player task");
+        spotify_client_deinit();
         return ESP_FAIL;
     }
 
+    return ESP_OK;
+}
+
+esp_err_t spotify_client_deinit()
+{
+    if (http_buffer) {
+        free(http_buffer);
+        http_buffer = NULL;
+    }
+    if (track_info->name) {
+        free(track_info->name);
+        track_info->name = NULL;
+    }
+    if (http_client.handle) {
+        esp_http_client_cleanup(http_client.handle);
+        http_client.handle = NULL;
+    }
+    if (ws_client_handle) {
+        esp_websocket_client_destroy(ws_client_handle);
+        ws_client_handle = NULL;
+    }
+    if (http_buf_lock) {
+        vSemaphoreDelete(http_buf_lock);
+        http_buf_lock = NULL;
+    }
+    if (event_queue) {
+        vQueueDelete(event_queue);
+        event_queue = NULL;
+    }
+    if (event_group) {
+        vEventGroupDelete(event_group);
+        event_group = NULL;
+    }
     return ESP_OK;
 }
 
@@ -173,7 +234,7 @@ esp_err_t spotify_dispatch_event(SendEvent_t event)
         xEventGroupSetBits(event_group, DISABLE_PLAYER);
         break;
     case DATA_PROCESSED_EVENT:
-        xEventGroupSetBits(event_group, DATA_PROCESSED);
+        xEventGroupSetBits(event_group, WS_DATA_CONSUMED);
         break;
     case DO_PLAY_EVENT:
         xEventGroupSetBits(event_group, DO_PLAY);
@@ -206,7 +267,6 @@ BaseType_t spotify_wait_event(SpotifyEvent_t *event, TickType_t xTicksToWait)
     // maybe we can send the DATA_PROCESSED_EVENT here
 }
 
-// ok
 esp_err_t spotify_play_context_uri(const char *uri, HttpStatus_Code *status_code)
 {
     esp_err_t err;
@@ -226,12 +286,12 @@ esp_err_t spotify_play_context_uri(const char *uri, HttpStatus_Code *status_code
     int str_len = sprintf(sprintf_buf, "{\"context_uri\":\"%s\"}", uri);
     assert(str_len <= SPRINTF_BUF_SIZE);
 
-    http_client.handler_cb = default_http_handler_cb;
+    http_client.handler_cb = json_http_handler_cb;
     http_client.method = HTTP_METHOD_PUT;
     http_client.endpoint = PLAYERURL(PLAY_TRACK);
 
     esp_http_client_set_post_field(http_client.handle, sprintf_buf, str_len);
-    PREPARE_CLIENT(http_client, access_token.value, "application/json");
+    PREPARE_CLIENT(access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
     if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
@@ -267,7 +327,7 @@ List *spotify_user_playlists()
     http_client.handler_cb = playlists_handler_cb;
     http_client.method = HTTP_METHOD_GET;
     http_client.endpoint = PLAYERURL("/me/playlists?offset=0&limit=50");
-    PREPARE_CLIENT(http_client, access_token.value, "application/json");
+    PREPARE_CLIENT(access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
     if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
@@ -298,10 +358,10 @@ List *spotify_available_devices()
         ESP_ERROR_CHECK(get_access_token());
     }
     ACQUIRE_LOCK(http_buf_lock);
-    http_client.handler_cb = default_http_handler_cb;
+    http_client.handler_cb = json_http_handler_cb;
     http_client.method = HTTP_METHOD_GET;
     http_client.endpoint = PLAYERURL(PLAYER "/devices");
-    PREPARE_CLIENT(http_client, access_token.value, "application/json");
+    PREPARE_CLIENT(access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
     if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
@@ -375,7 +435,7 @@ static void player_task(void *pvParameters)
     {
         uxBits = xEventGroupWaitBits(
             event_group,
-            ENABLE_PLAYER | DISABLE_PLAYER | WS_DATA_EVENT | WS_DISCONNECT_EVENT | DATA_PROCESSED | player_bits,
+            ENABLE_PLAYER | DISABLE_PLAYER | WS_DATA_EVENT | WS_DISCONNECT_EVENT | WS_DATA_CONSUMED | player_bits,
             pdTRUE,
             pdFALSE,
             portMAX_DELAY);
@@ -453,7 +513,7 @@ static void player_task(void *pvParameters)
             esp_err_t err = esp_websocket_client_start(ws_client_handle);
             if (err == ESP_OK)
             {
-                xEventGroupSetBits(event_group, READY_FOR_DATA);
+                xEventGroupSetBits(event_group, WS_READY_FOR_DATA);
             }
             else
             {
@@ -479,7 +539,7 @@ static void player_task(void *pvParameters)
                 assert(conn_id);
                 ESP_LOGD(TAG, "Connection id: '%s'", conn_id);
                 ESP_ERROR_CHECK(confirm_ws_session(conn_id));
-                xEventGroupSetBits(event_group, READY_FOR_DATA);
+                xEventGroupSetBits(event_group, WS_READY_FOR_DATA);
             }
             else
             {
@@ -487,9 +547,9 @@ static void player_task(void *pvParameters)
                 xQueueSend(event_queue, &spotify_evt, portMAX_DELAY);
             }
         }
-        else if (uxBits & DATA_PROCESSED)
+        else if (uxBits & WS_DATA_CONSUMED)
         {
-            xEventGroupSetBits(event_group, READY_FOR_DATA);
+            xEventGroupSetBits(event_group, WS_READY_FOR_DATA);
             // now the ws buff isn't our anymore
         }
     }
@@ -499,11 +559,11 @@ static esp_err_t confirm_ws_session(char *conn_id)
 {
     esp_err_t err;
     ACQUIRE_LOCK(http_buf_lock);
-    http_client.handler_cb = default_http_handler_cb;
+    http_client.handler_cb = json_http_handler_cb;
     http_client.method = HTTP_METHOD_PUT;
     char *url = http_utils_join_string("https://api.spotify.com/v1/me/notifications/player?connection_id=", 0, conn_id, 0);
     http_client.endpoint = url; // esp_http_client_set_url(http_client.handle, url);
-    PREPARE_CLIENT(http_client, access_token.value, "application/json");
+    PREPARE_CLIENT(access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
     if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
@@ -541,10 +601,9 @@ static inline esp_err_t http_retries_available(esp_err_t err)
     return ESP_FAIL;
 }
 
-static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+static esp_err_t http_event_handler_wrapper(esp_http_client_event_t *evt)
 {
-    http_client.handler_cb(http_buffer, evt);
-    return ESP_OK;
+    return http_client.handler_cb(evt);
 }
 
 static inline void free_track(TrackInfo *track)
@@ -572,66 +631,60 @@ static inline void debug_mem()
     ESP_LOGI(TAG, "free heap size: %lu", esp_get_free_heap_size());
 }
 
-ssize_t fetch_album_cover(TrackInfo *track, uint8_t **out_buf, size_t buf_size)
+ssize_t fetch_album_cover(TrackInfo *track, uint8_t *out_buf, size_t buf_size)
 {
-    static uint8_t *image_buf = NULL;
-
-    if (!image_buf)
+    if (!out_buf)
     {
-        // Alocar buffer en SPIRAM
-        image_buf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!image_buf)
-        {
-            ESP_LOGE(TAG, "Failed to alloc buffer");
-            return -1;
-        }
-        memset(image_buf, 0, buf_size);
+        ESP_LOGE(TAG, "Invalid buffer");
+        return ESP_FAIL;
     }
 
     ACQUIRE_LOCK(http_buf_lock);
     if (!track->album.url_cover)
     {
+        ESP_LOGE(TAG, "No cover url");
         RELEASE_LOCK(http_buf_lock);
-        return -1;
-    }
-    // we are using native request
-    http_client.handler_cb = dummy_http_handler_cb;
-
-    ESP_LOGW(TAG, "Fetching album cover: %s", track->album.url_cover);
-    esp_http_client_set_method(http_client.handle, HTTP_METHOD_GET);
-    esp_http_client_set_url(http_client.handle, track->album.url_cover);
-
-    esp_err_t err = esp_http_client_open(http_client.handle, 0);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "HTTP open failed: %s", esp_err_to_name(err));
-        esp_http_client_close(http_client.handle);
-        RELEASE_LOCK(http_buf_lock);
-        return -1;
+        return ESP_FAIL;
     }
 
-    int data_read = esp_http_client_read_response(http_client.handle, (char *)image_buf, buf_size);
-    if (data_read >= 0)
+    http_client.handler_cb = esp_http_client_event_handler;
+    http_client.method = HTTP_METHOD_GET;
+    http_client.endpoint = track->album.url_cover;
+    PREPARE_CLIENT(NULL, NULL);
+    http_data.buffer = out_buf;
+    http_data.buffer_size = buf_size;
+    esp_err_t err;
+    ssize_t data_read = ESP_FAIL;
+
+retry:
+    ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
+    if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
     {
+        s_retries = 0;
+        HttpStatus_Code status_code = esp_http_client_get_status_code(http_client.handle);
         int64_t length = esp_http_client_get_content_length(http_client.handle);
-        ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %" PRId64,
-                 esp_http_client_get_status_code(http_client.handle),
-                 length);
-        // ESP_LOG_BUFFER_HEX(TAG, image_buf, data_read);
-        ESP_LOGI(TAG, "Downloaded %d bytes", data_read);
-        *out_buf = image_buf;
+        ESP_LOGD(TAG, "HTTP Status Code = %d, content_length = %" PRId64, status_code, length);
         if (length > buf_size)
         {
             ESP_LOGE(TAG, "Image too big");
-            data_read = -1;
+        }
+        else if (status_code != HttpStatus_Ok)
+        {
+            ESP_LOGE(TAG, "Error trying to obtain cover. Status code: %d", status_code);
+        }
+        else
+        {
+            data_read = http_data.received_size;
         }
     }
-    else
+    else if (http_retries_available(err) == ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to read response");
-        // free(image_buf);
+        goto retry;
     }
     esp_http_client_close(http_client.handle);
+    // restore the buffer
+    http_data.buffer = (uint8_t *)http_buffer;
+    http_data.buffer_size = MAX_HTTP_BUFFER;
     RELEASE_LOCK(http_buf_lock);
     return data_read;
 }
@@ -640,10 +693,10 @@ static esp_err_t get_access_token()
 {
     esp_err_t err;
     ACQUIRE_LOCK(http_buf_lock);
-    http_client.handler_cb = default_http_handler_cb;
+    http_client.handler_cb = json_http_handler_cb;
     http_client.method = HTTP_METHOD_GET;
     http_client.endpoint = ACCESS_TOKEN_URL;
-    PREPARE_CLIENT(http_client, CONFIG_DISCORD_TOKEN, "application/json");
+    PREPARE_CLIENT(CONFIG_DISCORD_TOKEN, "application/json");
 
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
@@ -724,8 +777,8 @@ static esp_err_t player_cmd(PlayerCommand_t cmd, void *payload, HttpStatus_Code 
         return err;
     }
     ACQUIRE_LOCK(http_buf_lock);
-    http_client.handler_cb = default_http_handler_cb;
-    PREPARE_CLIENT(http_client, access_token.value, "application/json");
+    http_client.handler_cb = json_http_handler_cb;
+    PREPARE_CLIENT(access_token.value, "application/json");
 retry:
     ESP_LOGD(TAG, "Endpoint to send: %s", http_client.endpoint);
     if ((err = esp_http_client_perform(http_client.handle)) == ESP_OK)
@@ -770,12 +823,14 @@ retry:
  * approach is to process the "items" array one playlist at a time.
  *
  */
-static void playlists_handler_cb(char *dest, esp_http_client_event_t *evt)
+static esp_err_t playlists_handler_cb(esp_http_client_event_t *evt)
 {
+    http_data_t *http_data = (http_data_t *)evt->user_data;
+    char *dest = (char *)http_data->buffer;
+
     static const char *items_key = "\"items\"";
-    static int chars_stored = 0; // Number of chars stored in buffer
-    static int in_items = 0;     // Bandera para indicar si estamos dentro del arreglo "items"
-    static int brace_count = 0;  // Contador de llaves para detectar el final de un elemento
+    static int in_items = 0;    // Bandera para indicar si estamos dentro del arreglo "items"
+    static int brace_count = 0; // Contador de llaves para detectar el final de un elemento
 
     char *src = (char *)evt->data;
     int src_len = evt->data_len;
@@ -802,9 +857,9 @@ static void playlists_handler_cb(char *dest, esp_http_client_event_t *evt)
                 char next = (i < src_len - 1) ? src[i + 1] : 0;
                 if (prev == ',' && next == '\"')
                     continue;
-                if (prev == ':' && chars_stored > 1)
+                if (prev == ':' && (http_data->received_size) > 1)
                 {
-                    if (dest[chars_stored - 2] == '\"')
+                    if (dest[(http_data->received_size) - 2] == '\"')
                         continue;
                 }
                 if (strchr(" \"[]{}", prev) || strchr(" \"[]{}", next))
@@ -815,14 +870,14 @@ static void playlists_handler_cb(char *dest, esp_http_client_event_t *evt)
                 if (brace_count == 0)
                 {
                     // Start of new playlist
-                    chars_stored = 0;
+                    (http_data->received_size) = 0;
                 }
                 brace_count++;
             }
             if (brace_count > 0)
             {
-                assert(chars_stored < MAX_HTTP_BUFFER - 1);
-                dest[chars_stored++] = src[i];
+                assert((http_data->received_size) < MAX_HTTP_BUFFER - 1);
+                dest[(http_data->received_size)++] = src[i];
             }
             if (src[i] == '}')
             {
@@ -830,26 +885,27 @@ static void playlists_handler_cb(char *dest, esp_http_client_event_t *evt)
                 if (brace_count == 0)
                 {
                     // End of playlist
-                    dest[chars_stored] = '\0';
+                    dest[(http_data->received_size)] = '\0';
                     ESP_LOGD(TAG, "Playlist (len: %d):\n%s", strlen(dest), dest);
                     PlaylistItem_t *item = malloc(sizeof(*item));
                     assert(item);
                     parse_playlist(http_buffer, item);
                     assert(spotify_append_item_to_list(&playlists, (void *)item));
-                    chars_stored = 0;
+                    (http_data->received_size) = 0;
                 }
             }
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        chars_stored = in_items = brace_count = 0;
+        (http_data->received_size) = in_items = brace_count = 0;
         break;
     case HTTP_EVENT_DISCONNECTED:
-        chars_stored = in_items = brace_count = 0;
+        (http_data->received_size) = in_items = brace_count = 0;
         break;
     default:
         break;
     }
+    return ESP_OK;
 }
 
 static inline bool access_token_empty()

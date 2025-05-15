@@ -40,6 +40,7 @@ static lv_img_dsc_t pic_img_dsc = {
 
 /* Private function prototypes -----------------------------------------------*/
 static void now_playing_screen();
+static char *join_artist_names(List *artists);
 
 void app_main(void)
 {
@@ -84,7 +85,6 @@ static uint16_t *pixels = NULL;
 /* Private functions ---------------------------------------------------------*/
 static void now_playing_screen()
 {
-
     if (!pixels)
     {
         // Alocate pixel memory. Each line is an array of IMAGE_W 16-bit pixels; the `*pixels` array itself contains pointers to these lines.
@@ -114,6 +114,7 @@ static void now_playing_screen()
     // in the first iteration we wait forever
     TickType_t ticks_to_wait = portMAX_DELAY;
     uint32_t percent = 0;
+    char *artist_str = NULL;
     while (1)
     {
         /* Wait for track event ------------------------------------------------------*/
@@ -146,19 +147,39 @@ static void now_playing_screen()
                 percent = (track.progress_ms * 100) / track.duration_ms;
                 if (percent > 100)
                     percent = 100;
+                if (artist_str)
+                {
+                    free(artist_str);
+                }
+                artist_str = join_artist_names(&track.artists);
                 bsp_display_lock(0);
                 lv_label_set_text(ui_Track, track.name);
+                lv_label_set_text(ui_Artists, artist_str);
                 bsp_display_unlock();
-                uint8_t *buf;
                 size_t buf_size = COVER_W * COVER_H;
-                uint32_t jpg_size = fetch_album_cover(&track, &buf, buf_size);
+                uint8_t *buf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                uint32_t jpg_size = 0;
+                if (!buf)
+                {
+                    ESP_LOGE(TAG, "Failed to alloc buffer");
+                }
+                else
+                {
+                    jpg_size = fetch_album_cover(&track, buf, buf_size);
+                }
                 if ((int)jpg_size <= 0)
                 {
                     ESP_LOGE(TAG, "Failed to fetch album cover");
-                    //black image
+                    // black image
                     memset(pixels, 0, COVER_W_HALF * COVER_H_HALF * sizeof(uint16_t));
-                } else {
+                }
+                else
+                {
                     decode_image(pixels, buf, jpg_size, COVER_W_HALF, COVER_H_HALF, JPEG_IMAGE_SCALE_1_2);
+                }
+                if (buf)
+                {
+                    free(buf);
                 }
                 bsp_display_lock(0);
                 lv_obj_invalidate(ui_CoverImage);
@@ -192,8 +213,6 @@ static void now_playing_screen()
             }
         }
 
-        /* TODO: Track artists */
-
         /* Time progress */
         // t_time
 
@@ -201,4 +220,33 @@ static void now_playing_screen()
         lv_bar_set_value(ui_ProgressBar, percent, LV_ANIM_OFF);
         bsp_display_unlock();
     }
+}
+
+char *join_artist_names(List *artists)
+{
+    if (!artists || artists->count == 0) return strdup("");
+
+    size_t total_len = 0;
+    Node *node = artists->first;
+    while (node) {
+        total_len += strlen((char *)node->data);
+        if (node->next) total_len += 2; // ", "
+        node = node->next;
+    }
+    
+    // Reservamos la cadena final (+1 para el '\0')
+    char *result = malloc(total_len + 1);
+    if (!result) return NULL;
+
+    result[0] = '\0';
+
+    node = artists->first;
+    while (node) {
+        strcat(result, (char *)node->data);
+        if (node->next)
+            strcat(result, ", ");
+        node = node->next;
+    }
+
+    return result;
 }

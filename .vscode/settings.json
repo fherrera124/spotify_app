@@ -23,6 +23,20 @@
         "ui.h": "c",
         "jpeg_decoder.h": "c",
         "decode_jpg.h": "c",
-        "cstdint": "c"
+        "cstdint": "c",
+        "esp_netif.h": "c",
+        "protocol_examples_common.h": "c",
+        "atomic": "c",
+        "charconv": "c",
+        "optional": "c",
+        "format": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "limits.h": "c"
     }
 }

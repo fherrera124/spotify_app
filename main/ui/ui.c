@@ -11,18 +11,18 @@
 // SCREEN: ui_PlayerScreen
 void ui_PlayerScreen_screen_init(void);
 lv_obj_t * ui_PlayerScreen;
-void ui_event_ProgressBar(lv_event_t * e);
-lv_obj_t * ui_ProgressBar;
-lv_obj_t * ui_Container1;
+lv_obj_t * ui_MainContainer;
+lv_obj_t * ui_ButtonsContainer;
 void ui_event_PrevBtn(lv_event_t * e);
 lv_obj_t * ui_PrevBtn;
 void ui_event_PauseUnpauseBtn(lv_event_t * e);
 lv_obj_t * ui_PauseUnpauseBtn;
 void ui_event_NextBtn(lv_event_t * e);
 lv_obj_t * ui_NextBtn;
+void ui_event_ProgressBar(lv_event_t * e);
+lv_obj_t * ui_ProgressBar;
 lv_obj_t * ui_Track;
 lv_obj_t * ui_Artists;
-lv_obj_t * ui_CoverContainer;
 lv_obj_t * ui_CoverImage;
 // CUSTOM VARIABLES
 
@@ -42,16 +42,6 @@ lv_obj_t * ui____initial_actions0;
 ///////////////////// ANIMATIONS ////////////////////
 
 ///////////////////// FUNCTIONS ////////////////////
-void ui_event_ProgressBar(lv_event_t * e)
-{
-    lv_event_code_t event_code = lv_event_get_code(e);
-
-    if(event_code == LV_EVENT_VALUE_CHANGED) {
-        int value = *(int *)lv_event_get_param(e);
-        _ui_bar_set_property(ui_ProgressBar, _UI_BAR_PROPERTY_VALUE_WITH_ANIM, value);
-    }
-}
-
 void ui_event_PrevBtn(lv_event_t * e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
@@ -76,6 +66,16 @@ void ui_event_NextBtn(lv_event_t * e)
 
     if(event_code == LV_EVENT_CLICKED) {
         nextFn(e);
+    }
+}
+
+void ui_event_ProgressBar(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_VALUE_CHANGED) {
+        int value = *(int *)lv_event_get_param(e);
+        _ui_bar_set_property(ui_ProgressBar, _UI_BAR_PROPERTY_VALUE_WITH_ANIM, value);
     }
 }
 

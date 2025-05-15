@@ -65,6 +65,7 @@ typedef struct {
 
 /* Exported functions prototypes ---------------------------------------------*/
 esp_err_t  spotify_client_init(UBaseType_t priority);
+esp_err_t  spotify_client_deinit();
 esp_err_t  spotify_dispatch_event(SendEvent_t event);
 BaseType_t spotify_wait_event(SpotifyEvent_t* event, TickType_t xTicksToWait);
 esp_err_t  spotify_play_context_uri(const char* uri, HttpStatus_Code* status_code);
@@ -72,4 +73,4 @@ List*      spotify_user_playlists();
 List*      spotify_available_devices();
 void       spotify_clear_track(TrackInfo* track);
 esp_err_t  spotify_clone_track(TrackInfo* dest, const TrackInfo* src);
-ssize_t    fetch_album_cover(TrackInfo *track, uint8_t **out_buf, size_t buf_size);
+ssize_t    fetch_album_cover(TrackInfo *track, uint8_t *out_buf, size_t buf_size);
