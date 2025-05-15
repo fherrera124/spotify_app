@@ -63,6 +63,7 @@ static const char *TAG = "spotify_client";
 static EventGroupHandle_t event_group = NULL;
 static char *http_buffer = NULL;
 static char ws_buffer[4096];
+static TrackInfo *track_info = NULL;
 static char sprintf_buf[SPRINTF_BUF_SIZE];
 static SemaphoreHandle_t http_buf_lock = NULL; /* Mutex to manage access to the http client buffer */
 static uint8_t s_retries = 0;                  /* number of retries on error connections */
@@ -72,10 +73,6 @@ esp_websocket_client_handle_t ws_client_handle;
 static QueueHandle_t event_queue;
 List playlists = {.type = PLAYLIST_LIST};
 List devices = {.type = DEVICE_LIST};
-TrackInfo *track_info = &(TrackInfo){.artists.type = STRING_LIST}; /* pointer to an unnamed object, constructed in place
-by the the COMPOUND LITERAL expression "(TrackInfo) { 0 }". NOTE: Although the syntax of a compound
-literal is similar to a cast, the important distinction is that a cast is a non-lvalue expression
-while a compound literal is an lvalue */
 http_data_t http_data = {0};
 
 /* Globally scoped variables definitions -------------------------------------*/
@@ -108,7 +105,17 @@ esp_err_t spotify_client_init(UBaseType_t priority)
             return ESP_FAIL;
         }
     }
-
+    if (track_info == NULL)
+    {
+        track_info = (TrackInfo *)calloc(1, sizeof(TrackInfo));
+        if (!track_info)
+        {
+            ESP_LOGE(TAG, "Error allocating memory for track info");
+            spotify_client_deinit();
+            return ESP_FAIL;
+        }
+    }
+    
     http_data.buffer = (uint8_t *)http_buffer;
     http_data.buffer_size = MAX_HTTP_BUFFER;
 
@@ -191,9 +198,10 @@ esp_err_t spotify_client_deinit()
         free(http_buffer);
         http_buffer = NULL;
     }
-    if (track_info->name) {
-        free(track_info->name);
-        track_info->name = NULL;
+    if (track_info) {
+        spotify_clear_track(track_info);
+        free(track_info);
+        track_info = NULL;
     }
     if (http_client.handle) {
         esp_http_client_cleanup(http_client.handle);
@@ -391,6 +399,9 @@ retry:
 
 void spotify_clear_track(TrackInfo *track)
 {
+    if (!track) {
+        return;
+    }
     free_track(track);
     track->id[0] = 0;
     track->isPlaying = false;
@@ -608,13 +619,44 @@ static esp_err_t http_event_handler_wrapper(esp_http_client_event_t *evt)
 
 static inline void free_track(TrackInfo *track)
 {
-    free(track->name);
-    free(track->album.name);
-    free(track->album.url_cover);
-    spotify_free_nodes(&track->artists);
-    free(track->device.id);
-    free(track->device.name);
-    free(track->device.type);
+    if (!track)
+    {
+        return;
+    }
+    if (track->name)
+    {
+        free(track->name);
+        track->name = NULL;
+    }
+    if (track->album.name)
+    {
+        free(track->album.name);
+        track->album.name = NULL;
+    }
+    if (track->album.url_cover)
+    {
+        free(track->album.url_cover);
+        track->album.url_cover = NULL;
+    }
+    if (track->artists.first)
+    {
+        spotify_free_nodes(&track->artists);
+    }
+    if (track->device.id)
+    {
+        free(track->device.id);
+        track->device.id = NULL;
+    }
+    if (track->device.name)
+    {
+        free(track->device.name);
+        track->device.name = NULL;
+    }
+    if (track->device.type)
+    {
+        free(track->device.type);
+        track->device.type = NULL;
+    }
     strcpy(track->device.volume_percent, "-1");
 }
 

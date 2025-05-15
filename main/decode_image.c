@@ -66,7 +66,7 @@ esp_err_t decode_image(uint16_t *pixels, const uint8_t *image_jpg, uint32_t imag
     esp_jpeg_image_output_t outimg;
     esp_jpeg_decode(&jpeg_cfg, &outimg);
 
-    ESP_LOGI(TAG, "JPEG image decoded! Size of the decoded image is: %dpx x %dpx", outimg.width, outimg.height);
+    ESP_LOGD(TAG, "JPEG image decoded! Size of the decoded image is: %dpx x %dpx", outimg.width, outimg.height);
     free(workbuf);
     return ret;
 /* err:
