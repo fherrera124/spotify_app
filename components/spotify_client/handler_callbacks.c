@@ -28,18 +28,19 @@ size_t static inline memcpy_trimmed(char *dest, int dest_size, const char *src, 
 esp_err_t json_http_handler_cb(esp_http_client_event_t *evt)
 {
     http_data_t *http_data = (http_data_t *)evt->user_data;
-    char *dest = (char *)http_data->buffer;
+    char *buffer = (char *)http_data->buffer;
+    size_t buffer_size = http_data->buffer_size;
     static int output_len; // Stores number of bytes read
 
     switch (evt->event_id)
     {
     case HTTP_EVENT_ON_DATA:
-        size_t stored = memcpy_trimmed(dest + output_len, MAX_HTTP_BUFFER - output_len, evt->data, evt->data_len);
+        size_t stored = memcpy_trimmed(buffer + output_len, buffer_size - output_len, evt->data, evt->data_len);
         output_len += stored;
         http_data->received_size = output_len;
         break;
     case HTTP_EVENT_ON_FINISH:
-        dest[output_len] = 0;
+        buffer[output_len] = 0;
         output_len = 0;
         break;
     case HTTP_EVENT_DISCONNECTED:
@@ -49,7 +50,7 @@ esp_err_t json_http_handler_cb(esp_http_client_event_t *evt)
         {
             ESP_LOGI(TAG, "Last esp error code: 0x%x", err);
             ESP_LOGI(TAG, "Last mbedtls failure: 0x%x", mbedtls_err);
-            dest[output_len] = 0;
+            buffer[output_len] = 0;
             output_len = 0;
         }
         break;
@@ -63,6 +64,7 @@ void default_ws_handler_cb(void *handler_args, esp_event_base_t base, int32_t ev
 {
     handler_args_t *args = (handler_args_t *)handler_args;
     char *buffer = args->buffer;
+    size_t buffer_size = args->buffer_size;
     EventGroupHandle_t event_group = args->event_group;
     esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
     static int lock = 0;
@@ -100,7 +102,7 @@ void default_ws_handler_cb(void *handler_args, esp_event_base_t base, int32_t ev
                     portMAX_DELAY);
                 lock = 1;
             }
-            assert((data->payload_len) + 1 <= MAX_HTTP_BUFFER);
+            assert((data->payload_len) + 1 <= buffer_size); // TODO: don't use assert
             memcpy(buffer + data->payload_offset, data->data_ptr, data->data_len);
             if (data->payload_offset + data->data_len == data->payload_len)
             {

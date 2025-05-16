@@ -11,6 +11,8 @@
 #include <string.h>
 
 /* Private macro -------------------------------------------------------------*/
+#define MAX_HTTP_BUFFER 8192
+#define MAX_WS_BUFFER 4096
 #define ACCESS_TOKEN_URL "https://discord.com/api/v8/users/@me/connections/spotify/" CONFIG_SPOTIFY_UID "/access-token"
 #define PLAYER "/me/player"
 #define TOKEN_URL "https://accounts.spotify.com/api/token"
@@ -62,7 +64,7 @@ typedef enum
 static const char *TAG = "spotify_client";
 static EventGroupHandle_t event_group = NULL;
 static char *http_buffer = NULL;
-static char ws_buffer[4096];
+static char ws_buffer[MAX_WS_BUFFER];
 static TrackInfo *track_info = NULL;
 static char sprintf_buf[SPRINTF_BUF_SIZE];
 static SemaphoreHandle_t http_buf_lock = NULL; /* Mutex to manage access to the http client buffer */
@@ -439,6 +441,7 @@ static void player_task(void *pvParameters)
 {
     handler_args_t handler_args = {
         .buffer = ws_buffer,
+        .buffer_size = MAX_WS_BUFFER,
         .event_group = event_group};
     int first_msg = 1;
     int enabled = 0;
@@ -921,7 +924,7 @@ static esp_err_t playlists_handler_cb(esp_http_client_event_t *evt)
             }
             if (brace_count > 0)
             {
-                assert((http_data->received_size) < MAX_HTTP_BUFFER - 1);
+                assert((http_data->received_size) < (http_data->buffer_size) - 1); // TODO: dont use assert
                 dest[(http_data->received_size)++] = src[i];
             }
             if (src[i] == '}')

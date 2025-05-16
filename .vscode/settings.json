@@ -38,6 +38,7 @@
         "type_traits": "c",
         "utility": "c",
         "limits.h": "c",
-        "complex": "c"
+        "complex": "c",
+        "spotify_client_priv.h": "c"
     }
 }

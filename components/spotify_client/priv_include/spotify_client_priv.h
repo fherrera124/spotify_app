@@ -22,7 +22,6 @@ extern "C" {
 #include "freertos/task.h"
 
 /* Exported macro ------------------------------------------------------------*/
-#define MAX_HTTP_BUFFER 8192
 // eventgroup macros
 #define ENABLE_PLAYER       (1 << 0)
 #define DISABLE_PLAYER      (1 << 1)

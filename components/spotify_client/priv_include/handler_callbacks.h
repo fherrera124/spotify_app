@@ -12,6 +12,7 @@ extern "C" {
 
 typedef struct {
     char*              buffer;
+    size_t             buffer_size;
     EventGroupHandle_t event_group;
 } handler_args_t;
 
