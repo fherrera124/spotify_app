@@ -69,7 +69,7 @@ static SemaphoreHandle_t http_buf_lock = NULL; /* Mutex to manage access to the 
 static uint8_t s_retries = 0;                  /* number of retries on error connections */
 AccessToken access_token = {.value = "Bearer "};
 static HttpClient_data_t http_client = {0};
-esp_websocket_client_handle_t ws_client_handle;
+static esp_websocket_client_handle_t ws_client_handle;
 static QueueHandle_t event_queue;
 List playlists = {.type = PLAYLIST_LIST};
 List devices = {.type = DEVICE_LIST};
@@ -114,6 +114,7 @@ esp_err_t spotify_client_init(UBaseType_t priority)
             spotify_client_deinit();
             return ESP_FAIL;
         }
+        track_info->artists.type = STRING_LIST;
     }
     
     http_data.buffer = (uint8_t *)http_buffer;
@@ -131,6 +132,7 @@ esp_err_t spotify_client_init(UBaseType_t priority)
         .uri = "wss://dealer.spotify.com",
         .cert_pem = certs_pem_start,
         .ping_interval_sec = 30,
+        .disable_auto_reconnect = true,
     };
 
     track_info->name = calloc(1, 1);
@@ -156,6 +158,7 @@ esp_err_t spotify_client_init(UBaseType_t priority)
         spotify_client_deinit();
         return ESP_FAIL;
     }
+    esp_websocket_client_destroy_on_exit(ws_client_handle);
 
     http_buf_lock = xSemaphoreCreateMutex();
     if (!http_buf_lock)

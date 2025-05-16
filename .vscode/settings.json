@@ -37,6 +37,7 @@
         "tuple": "c",
         "type_traits": "c",
         "utility": "c",
-        "limits.h": "c"
+        "limits.h": "c",
+        "complex": "c"
     }
 }

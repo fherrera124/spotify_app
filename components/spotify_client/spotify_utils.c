@@ -1,6 +1,10 @@
 #include "spotify_utils.h"
+#include "esp_log.h"
 #include <stdbool.h>
 #include <string.h>
+
+/* Locally scoped variables --------------------------------------------------*/
+static const char *TAG = "SPOTIFY_UTILS";
 
 /* Private function prototypes -----------------------------------------------*/
 Node* create_node(void* item);
@@ -74,6 +78,7 @@ void spotify_free_nodes(List* list)
             free(device_item);
             break;
         default:
+            ESP_LOGE(TAG, "Unknown list type");
             return;
         }
         aux = node->next;
