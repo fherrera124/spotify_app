@@ -37,11 +37,18 @@ extern "C" {
 #define DO_PAUSE_UNPAUSE    (1 << 11)
 
 /* Exported types ------------------------------------------------------------*/
-typedef struct
-{
-    char   value[400];
-    time_t expiresIn;
-} AccessToken;
+typedef struct {
+    uint8_t *buffer;
+    size_t buffer_size;
+    size_t current_size;
+    void * cxt;
+} http_evt_user_data_t;
+
+typedef struct {
+    char*              buffer;
+    size_t             buffer_size;
+    EventGroupHandle_t event_group;
+} ws_evt_user_data_t;
 
 /* Exported variables declarations -------------------------------------------*/
 

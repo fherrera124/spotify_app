@@ -33,10 +33,16 @@ void app_main(void)
      */
     ESP_ERROR_CHECK(example_connect());
 
-    ESP_ERROR_CHECK(spotify_client_init(5));
+    // Initialize the Spotify client
+    esp_spotify_client_handle_t client = spotify_client_init(5);
+    if (!client)
+    {
+        ESP_LOGE(TAG, "Error initializing Spotify client");
+        return;
+    }
 
     // obtain the user playlists
-    List* playlists = spotify_user_playlists();
+    List* playlists = spotify_user_playlists(client);
     if (playlists->count > 0) {
         ESP_LOGI(TAG, "User playlists:");
         Node* playlist_n = playlists->first;
@@ -53,7 +59,7 @@ void app_main(void)
     assert(playlists->count == 0);
 
     // obtain the available devices
-    List* available_devices = spotify_available_devices();
+    List* available_devices = spotify_available_devices(client);
     if (available_devices->count > 0) {
         ESP_LOGI(TAG, "Available devices:");
         Node* device_n = available_devices->first;
@@ -70,12 +76,12 @@ void app_main(void)
     assert(available_devices->count == 0);
 
     // enable the player and wait for events
-    spotify_dispatch_event(ENABLE_PLAYER_EVENT);
+    player_dispatch_event(client, ENABLE_PLAYER_EVENT);
     SpotifyEvent_t event;
     TrackInfo      track = { .artists.type = STRING_LIST };
     assert(track.name = calloc(1, 1));
     while (1) {
-        spotify_wait_event(&event, portMAX_DELAY);
+        spotify_wait_event(client, &event, portMAX_DELAY);
         if (event.type == NEW_TRACK) {
             ESP_LOGI(TAG, "#");
             spotify_clear_track(&track);
@@ -107,6 +113,6 @@ void app_main(void)
                 ESP_LOGW(TAG, "progress: %lld", track.progress_ms);
             }
         }
-        spotify_dispatch_event(DATA_PROCESSED_EVENT);
+        player_dispatch_event(client, DATA_PROCESSED_EVENT);
     }
 }

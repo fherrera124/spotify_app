@@ -6,17 +6,19 @@
 #include "ui.h"
 #include "spotify_client.h"
 
+extern esp_spotify_client_handle_t client;
+
 void prevFn(lv_event_t * e)
 {
-	spotify_dispatch_event(DO_PREVIOUS_EVENT);
+	player_dispatch_event(client, DO_PREVIOUS_EVENT);
 }
 
 void pauseUnpauseFn(lv_event_t * e)
 {
-	spotify_dispatch_event(PAUSE_UNPAUSE_EVENT);
+	player_dispatch_event(client, PAUSE_UNPAUSE_EVENT);
 }
 
 void nextFn(lv_event_t * e)
 {
-	spotify_dispatch_event(DO_NEXT_EVENT);
+	player_dispatch_event(client, DO_NEXT_EVENT);
 }

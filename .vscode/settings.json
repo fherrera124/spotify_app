@@ -39,6 +39,9 @@
         "utility": "c",
         "limits.h": "c",
         "complex": "c",
-        "spotify_client_priv.h": "c"
+        "spotify_client_priv.h": "c",
+        "handler_callbacks.h": "c",
+        "esp_websocket_client.h": "c",
+        "freertos.h": "c"
     }
 }

@@ -8,6 +8,8 @@
 #include "spotify_client_priv.h"
 #include <stdio.h>
 #include <string.h>
+#include "spotify_utils.h"
+#include "parse_objects.h"
 
 /* Private macro -------------------------------------------------------------*/
 #ifndef MIN
@@ -25,19 +27,20 @@ static const char *TAG = "HANDLER_CALLBACKS";
 size_t static inline memcpy_trimmed(char *dest, int dest_size, const char *src, size_t src_len);
 
 /* Exported functions --------------------------------------------------------*/
-esp_err_t json_http_handler_cb(esp_http_client_event_t *evt)
+esp_err_t json_http_event_cb(esp_http_client_event_t *evt)
 {
-    http_data_t *http_data = (http_data_t *)evt->user_data;
-    char *buffer = (char *)http_data->buffer;
-    size_t buffer_size = http_data->buffer_size;
-    static int output_len; // Stores number of bytes read
+    http_evt_user_data_t *user_data = evt->user_data;
+    char *buffer = (char *)user_data->buffer;
+    size_t buffer_size = user_data->buffer_size;
+    static int output_len; // Stores efective number of bytes stored
 
     switch (evt->event_id)
     {
     case HTTP_EVENT_ON_DATA:
+        ESP_LOGD(TAG, "CHUNK DATA:\n%.*s", evt->data_len, (char *)evt->data);
         size_t stored = memcpy_trimmed(buffer + output_len, buffer_size - output_len, evt->data, evt->data_len);
         output_len += stored;
-        http_data->received_size = output_len;
+        user_data->current_size = output_len;
         break;
     case HTTP_EVENT_ON_FINISH:
         buffer[output_len] = 0;
@@ -60,12 +63,12 @@ esp_err_t json_http_handler_cb(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-void default_ws_handler_cb(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    handler_args_t *args = (handler_args_t *)handler_args;
-    char *buffer = args->buffer;
-    size_t buffer_size = args->buffer_size;
-    EventGroupHandle_t event_group = args->event_group;
+    ws_evt_user_data_t *user_data = handler_args;
+    char *buffer = user_data->buffer;
+    size_t buffer_size = user_data->buffer_size;
+    EventGroupHandle_t event_group = user_data->event_group;
     esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
     static int lock = 0;
 
@@ -121,10 +124,10 @@ void default_ws_handler_cb(void *handler_args, esp_event_base_t base, int32_t ev
     }
 }
 
-esp_err_t esp_http_client_event_handler(esp_http_client_event_t *evt)
+esp_err_t default_http_event_cb(esp_http_client_event_t *evt)
 {
-    http_data_t *http_data = (http_data_t *)evt->user_data;
-    char *output_buffer = (char *)http_data->buffer; // Buffer to store response of http request from event handler
+    http_evt_user_data_t *user_data = evt->user_data;
+    char *output_buffer = (char *)user_data->buffer; // Buffer to store response of http request from event handler
     static int output_len;                           // Stores number of bytes read
 
     switch (evt->event_id)
@@ -145,13 +148,13 @@ esp_err_t esp_http_client_event_handler(esp_http_client_event_t *evt)
         int copy_len = 0;
         // The last byte in output_buffer is kept for the NULL character in case of out-of-bound access.
         // TODO: revisar
-        copy_len = MIN(evt->data_len, (http_data->buffer_size - output_len));
+        copy_len = MIN(evt->data_len, (user_data->buffer_size - output_len));
         if (copy_len)
         {
             memcpy(output_buffer + output_len, evt->data, copy_len);
         }
         output_len += copy_len;
-        http_data->received_size = output_len;
+        user_data->current_size = output_len;
         break;
     case HTTP_EVENT_ON_FINISH:
         ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
@@ -173,6 +176,97 @@ esp_err_t esp_http_client_event_handler(esp_http_client_event_t *evt)
         esp_http_client_set_header(evt->client, "From", "user@example.com");
         esp_http_client_set_header(evt->client, "Accept", "text/html");
         esp_http_client_set_redirection(evt->client);
+        break;
+    default:
+        break;
+    }
+    return ESP_OK;
+}
+
+/**
+ * @brief We don't have enough memory to store the whole JSON. So the
+ * approach is to process the "items" array one playlist at a time.
+ *
+ */
+esp_err_t playlist_http_event_cb(esp_http_client_event_t *evt)
+{
+    http_evt_user_data_t *user_data = evt->user_data;
+    char *buffer = (char *)user_data->buffer;
+    List * playlists = user_data->cxt;
+
+    static const char *items_key = "\"items\"";
+    static int in_items = 0;    // Bandera para indicar si estamos dentro del arreglo "items"
+    static int brace_count = 0; // Contador de llaves para detectar el final de un elemento
+
+    char *src = (char *)evt->data;
+    int src_len = evt->data_len;
+
+    switch (evt->event_id)
+    {
+    case HTTP_EVENT_ON_DATA:
+        if (!in_items)
+        {
+            char *match_found = memmem(src, src_len, items_key, strlen(items_key));
+            if (!match_found)
+                break;
+            in_items = 1;
+            match_found += strlen(items_key);
+            src_len -= match_found - src;
+            src = match_found;
+        }
+        for (int i = 0; i < src_len; i++)
+        {
+            // Skip unnecessary spaces
+            if (isspace((unsigned char)src[i]))
+            {
+                char prev = i ? src[i - 1] : 0;
+                char next = (i < src_len - 1) ? src[i + 1] : 0;
+                if (prev == ',' && next == '\"')
+                    continue;
+                if (prev == ':' && (user_data->current_size) > 1)
+                {
+                    if (buffer[(user_data->current_size) - 2] == '\"')
+                        continue;
+                }
+                if (strchr(" \"[]{}", prev) || strchr(" \"[]{}", next))
+                    continue;
+            }
+            if (src[i] == '{')
+            {
+                if (brace_count == 0)
+                {
+                    // Start of new playlist
+                    (user_data->current_size) = 0;
+                }
+                brace_count++;
+            }
+            if (brace_count > 0)
+            {
+                assert((user_data->current_size) < (user_data->buffer_size) - 1); // TODO: dont use assert
+                buffer[(user_data->current_size)++] = src[i];
+            }
+            if (src[i] == '}')
+            {
+                brace_count--;
+                if (brace_count == 0)
+                {
+                    // End of playlist
+                    buffer[(user_data->current_size)] = '\0';
+                    ESP_LOGD(TAG, "Playlist (len: %d):\n%s", strlen(buffer), buffer);
+                    PlaylistItem_t *item = malloc(sizeof(*item));
+                    assert(item);
+                    parse_playlist(buffer, item);
+                    assert(spotify_append_item_to_list(playlists, (void *)item));
+                    (user_data->current_size) = 0;
+                }
+            }
+        }
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        (user_data->current_size) = in_items = brace_count = 0;
+        break;
+    case HTTP_EVENT_DISCONNECTED:
+        (user_data->current_size) = in_items = brace_count = 0;
         break;
     default:
         break;

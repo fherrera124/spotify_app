@@ -6,6 +6,9 @@
 /* Exported macro ------------------------------------------------------------*/
 
 /* Exported types ------------------------------------------------------------*/
+
+typedef struct esp_spotify_client *esp_spotify_client_handle_t;
+
 typedef enum {
     SAME_TRACK,
     NEW_TRACK,
@@ -64,13 +67,13 @@ typedef struct {
 } SpotifyEvent_t;
 
 /* Exported functions prototypes ---------------------------------------------*/
-esp_err_t  spotify_client_init(UBaseType_t priority);
-esp_err_t  spotify_client_deinit();
-esp_err_t  spotify_dispatch_event(SendEvent_t event);
-BaseType_t spotify_wait_event(SpotifyEvent_t* event, TickType_t xTicksToWait);
-esp_err_t  spotify_play_context_uri(const char* uri, HttpStatus_Code* status_code);
-List*      spotify_user_playlists();
-List*      spotify_available_devices();
+esp_spotify_client_handle_t  spotify_client_init(UBaseType_t priority);
+esp_err_t  spotify_client_deinit(esp_spotify_client_handle_t client);
+esp_err_t  player_dispatch_event(esp_spotify_client_handle_t client, SendEvent_t event);
+BaseType_t spotify_wait_event(esp_spotify_client_handle_t client, SpotifyEvent_t* event, TickType_t xTicksToWait);
+esp_err_t  spotify_play_context_uri(esp_spotify_client_handle_t client, const char* uri, HttpStatus_Code* status_code);
+List*      spotify_user_playlists(esp_spotify_client_handle_t client);
+List*      spotify_available_devices(esp_spotify_client_handle_t client);
 void       spotify_clear_track(TrackInfo* track);
 esp_err_t  spotify_clone_track(TrackInfo* dest, const TrackInfo* src);
-ssize_t    fetch_album_cover(TrackInfo *track, uint8_t *out_buf, size_t buf_size);
+ssize_t    fetch_album_art(esp_spotify_client_handle_t client, TrackInfo *track, uint8_t *out_buf, size_t buf_size);

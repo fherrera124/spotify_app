@@ -16,6 +16,8 @@
 #include "decode_jpg.h"
 #include "jpeg_decoder.h"
 
+esp_spotify_client_handle_t client = NULL;
+
 /* Private macro -------------------------------------------------------------*/
 #define COVER_W 300
 #define COVER_H 300
@@ -75,7 +77,12 @@ void app_main(void)
     ESP_ERROR_CHECK(example_connect());
 
     // Initialize the Spotify client
-    ESP_ERROR_CHECK(spotify_client_init(5));
+    client = spotify_client_init(5);
+    if (!client)
+    {
+        ESP_LOGE(TAG, "Error initializing Spotify client");
+        return;
+    }
 
     now_playing_screen();
 }
@@ -109,7 +116,7 @@ static void now_playing_screen()
     char t_time[6] = {"00:00"};
 
     // enable the player and wait for events
-    spotify_dispatch_event(ENABLE_PLAYER_EVENT);
+    player_dispatch_event(client, ENABLE_PLAYER_EVENT);
 
     // in the first iteration we wait forever
     TickType_t ticks_to_wait = portMAX_DELAY;
@@ -118,7 +125,7 @@ static void now_playing_screen()
     while (1)
     {
         /* Wait for track event ------------------------------------------------------*/
-        if (pdPASS == spotify_wait_event(&event, ticks_to_wait))
+        if (pdPASS == spotify_wait_event(client, &event, ticks_to_wait))
         {
             event_stamp = xTaskGetTickCount();
             // just to be sure...
@@ -133,7 +140,7 @@ static void now_playing_screen()
                 else
                 {
                 }
-                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                player_dispatch_event(client, DATA_PROCESSED_EVENT);
                 continue;
             }
             ticks_to_wait = 0;
@@ -143,7 +150,7 @@ static void now_playing_screen()
             case NEW_TRACK:
                 spotify_clear_track(&track);
                 spotify_clone_track(&track, (TrackInfo *)event.payload);
-                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                player_dispatch_event(client, DATA_PROCESSED_EVENT);
                 percent = (track.progress_ms * 100) / track.duration_ms;
                 if (percent > 100)
                     percent = 100;
@@ -165,7 +172,7 @@ static void now_playing_screen()
                 }
                 else
                 {
-                    jpg_size = fetch_album_cover(&track, buf, buf_size);
+                    jpg_size = fetch_album_art(client, &track, buf, buf_size);
                 }
                 if ((int)jpg_size <= 0)
                 {
@@ -189,7 +196,7 @@ static void now_playing_screen()
                 TrackInfo *t_updated = event.payload;
                 track.isPlaying = t_updated->isPlaying;
                 track.progress_ms = t_updated->progress_ms;
-                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                player_dispatch_event(client, DATA_PROCESSED_EVENT);
                 percent = (track.progress_ms * 100) / track.duration_ms;
                 if (percent > 100)
                     percent = 100;
@@ -198,7 +205,7 @@ static void now_playing_screen()
                 // TODO: get all devices available
                 break;
             default:
-                spotify_dispatch_event(DATA_PROCESSED_EVENT);
+                player_dispatch_event(client, DATA_PROCESSED_EVENT);
                 continue;
             }
         }
