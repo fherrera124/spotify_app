@@ -56,12 +56,12 @@ struct esp_spotify_client
     {
         esp_http_client_handle_t handle;
         http_event_handle_cb http_event_cb;
-        http_evt_user_data_t user_data;
+        evt_user_data_t user_data;
     } http_client;
     struct
     {
         esp_websocket_client_handle_t handle;
-        ws_evt_user_data_t user_data;
+        evt_user_data_t user_data;
     } ws_client;
     QueueHandle_t event_queue;
 };
@@ -123,8 +123,9 @@ esp_spotify_client_handle_t spotify_client_init(UBaseType_t priority)
         .buffer_size_tx = DEFAULT_HTTP_BUF_SIZE + 256,
     };
 
-    static esp_websocket_client_config_t websocket_cfg = {
+    esp_websocket_client_config_t websocket_cfg = {
         .uri = "wss://dealer.spotify.com",
+        .user_context = &client->ws_client.user_data,
         .cert_pem = certs_pem_start,
         .ping_interval_sec = 30,
         .disable_auto_reconnect = true,
@@ -154,7 +155,7 @@ esp_spotify_client_handle_t spotify_client_init(UBaseType_t priority)
         return NULL;
     }
     esp_websocket_client_destroy_on_exit(client->ws_client.handle);
-    client->ws_client.user_data.buffer = (char *)calloc(1, MAX_WS_BUFFER);
+    client->ws_client.user_data.buffer = (uint8_t *)calloc(1, MAX_WS_BUFFER);
     if (!client->ws_client.user_data.buffer)
     {
         spotify_client_deinit(client);
@@ -184,7 +185,7 @@ esp_spotify_client_handle_t spotify_client_init(UBaseType_t priority)
         spotify_client_deinit(client);
         return NULL;
     }
-    client->ws_client.user_data.event_group = client->event_group;
+    client->ws_client.user_data.ctx = client->event_group;
 
     int res = xTaskCreate(player_task, "player_task", 4096, client, priority, NULL);
     if (!res)
@@ -357,7 +358,7 @@ List *spotify_user_playlists(esp_spotify_client_handle_t client)
         ESP_ERROR_CHECK(get_access_token(client));
     }
     ACQUIRE_LOCK(client->http_buf_lock);
-    client->http_client.user_data.cxt = playlists; // pass the playlists as context to event handler
+    client->http_client.user_data.ctx = playlists; // pass the playlists as context to event handler
     client->http_client.http_event_cb = playlist_http_event_cb;
     prepare_client(client->http_client.handle, client->access_token.value, "application/json", PLAYERURL("/me/playlists?offset=0&limit=50"), HTTP_METHOD_GET);
 retry:
@@ -384,7 +385,7 @@ retry:
         free(playlists);
         playlists = NULL;
     }
-    client->http_client.user_data.cxt = NULL;
+    client->http_client.user_data.ctx = NULL;
     esp_http_client_close(client->http_client.handle);
     RELEASE_LOCK(client->http_buf_lock);
     return playlists;
@@ -564,7 +565,7 @@ static void player_task(void *pvParameters)
 
             esp_websocket_client_set_uri(client->ws_client.handle, uri); // TODO: fix, on WebSocket Error
             free(uri);
-            esp_websocket_register_events(client->ws_client.handle, WEBSOCKET_EVENT_ANY, default_ws_event_cb, &client->ws_client.user_data);
+            esp_websocket_register_events(client->ws_client.handle, WEBSOCKET_EVENT_ANY, default_ws_event_cb, NULL);
             esp_err_t err = esp_websocket_client_start(client->ws_client.handle);
             if (err == ESP_OK)
             {
@@ -590,7 +591,7 @@ static void player_task(void *pvParameters)
             {
                 first_msg = 0;
                 char *conn_id = NULL;
-                parse_connection_id(client->ws_client.user_data.buffer, &conn_id);
+                parse_connection_id((char *)client->ws_client.user_data.buffer, &conn_id);
                 assert(conn_id);
                 ESP_LOGD(TAG, "Connection id: '%s'", conn_id);
                 ESP_ERROR_CHECK(confirm_ws_session(client, conn_id));
@@ -598,7 +599,7 @@ static void player_task(void *pvParameters)
             }
             else
             {
-                spotify_evt = parse_track(client->ws_client.user_data.buffer, &client->track_info, 0);
+                spotify_evt = parse_track((char *)client->ws_client.user_data.buffer, &client->track_info, 0);
                 xQueueSend(client->event_queue, &spotify_evt, portMAX_DELAY);
             }
         }

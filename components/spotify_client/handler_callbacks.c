@@ -29,7 +29,7 @@ size_t static inline memcpy_trimmed(char *dest, int dest_size, const char *src, 
 /* Exported functions --------------------------------------------------------*/
 esp_err_t json_http_event_cb(esp_http_client_event_t *evt)
 {
-    http_evt_user_data_t *user_data = evt->user_data;
+    evt_user_data_t *user_data = evt->user_data;
     char *buffer = (char *)user_data->buffer;
     size_t buffer_size = user_data->buffer_size;
     static int output_len; // Stores efective number of bytes stored
@@ -65,13 +65,12 @@ esp_err_t json_http_event_cb(esp_http_client_event_t *evt)
 
 void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ws_evt_user_data_t *user_data = handler_args;
-    char *buffer = user_data->buffer;
-    size_t buffer_size = user_data->buffer_size;
-    EventGroupHandle_t event_group = user_data->event_group;
     esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
-    static int lock = 0;
-
+    evt_user_data_t *user_data = data->user_context;
+    char *buffer = (char *)user_data->buffer;
+    size_t buffer_size = user_data->buffer_size;
+    EventGroupHandle_t event_group = user_data->ctx;
+    
     switch (event_id)
     {
     case WEBSOCKET_EVENT_CONNECTED:
@@ -95,7 +94,7 @@ void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t even
         }
         if (data->op_code == 0x1 || data->op_code == 0x2)
         {
-            if (!lock)
+            if (data->payload_offset == 0) // first chunk of the message
             {
                 xEventGroupWaitBits(
                     event_group,
@@ -103,16 +102,16 @@ void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t even
                     pdTRUE,
                     pdFALSE,
                     portMAX_DELAY);
-                lock = 1;
+                user_data->current_size = 0;
             }
             assert((data->payload_len) + 1 <= buffer_size); // TODO: don't use assert
             memcpy(buffer + data->payload_offset, data->data_ptr, data->data_len);
             if (data->payload_offset + data->data_len == data->payload_len)
             {
-                ESP_LOGD(TAG, "Complete message received");
+                ESP_LOGD(TAG, "Complete message received. Length: %d", data->payload_len);
                 buffer[data->payload_len] = 0;
+                user_data->current_size = data->payload_len;
                 ESP_LOGD(TAG, "%s", buffer);
-                lock = 0;
                 xEventGroupSetBits(event_group, WS_DATA_EVENT);
             }
         }
@@ -126,7 +125,7 @@ void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t even
 
 esp_err_t default_http_event_cb(esp_http_client_event_t *evt)
 {
-    http_evt_user_data_t *user_data = evt->user_data;
+    evt_user_data_t *user_data = evt->user_data;
     char *output_buffer = (char *)user_data->buffer; // Buffer to store response of http request from event handler
     static int output_len;                           // Stores number of bytes read
 
@@ -190,9 +189,9 @@ esp_err_t default_http_event_cb(esp_http_client_event_t *evt)
  */
 esp_err_t playlist_http_event_cb(esp_http_client_event_t *evt)
 {
-    http_evt_user_data_t *user_data = evt->user_data;
+    evt_user_data_t *user_data = evt->user_data;
     char *buffer = (char *)user_data->buffer;
-    List * playlists = user_data->cxt;
+    List * playlists = user_data->ctx;
 
     static const char *items_key = "\"items\"";
     static int in_items = 0;    // Bandera para indicar si estamos dentro del arreglo "items"

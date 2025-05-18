@@ -41,14 +41,8 @@ typedef struct {
     uint8_t *buffer;
     size_t buffer_size;
     size_t current_size;
-    void * cxt;
-} http_evt_user_data_t;
-
-typedef struct {
-    char*              buffer;
-    size_t             buffer_size;
-    EventGroupHandle_t event_group;
-} ws_evt_user_data_t;
+    void * ctx;
+} evt_user_data_t;
 
 /* Exported variables declarations -------------------------------------------*/
 
