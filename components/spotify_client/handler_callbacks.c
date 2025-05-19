@@ -115,7 +115,6 @@ void default_ws_event_cb(void *handler_args, esp_event_base_t base, int32_t even
                 xEventGroupSetBits(event_group, WS_DATA_EVENT);
             }
         }
-
         break;
     case WEBSOCKET_EVENT_ERROR:
         ESP_LOGE(TAG, "WebSocket Error");
