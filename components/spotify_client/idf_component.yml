@@ -1,0 +1,6 @@
+version: "1.0.0"
+description: Spotify client for ESP-IDF
+url: https://github.com/...
+dependencies:
+  idf: '>=5.0'
+  espressif/esp_websocket_client: ^1.4.0

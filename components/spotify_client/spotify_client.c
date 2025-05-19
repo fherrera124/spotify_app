@@ -42,7 +42,6 @@ typedef enum
 
 struct esp_spotify_client
 {
-    EventGroupHandle_t event_group;
     TrackInfo *track_info;
     char sprintf_buf[SPRINTF_BUF_SIZE];
     SemaphoreHandle_t http_buf_lock; /* Mutex to manage access to the http client buffer */
@@ -62,6 +61,7 @@ struct esp_spotify_client
     {
         esp_websocket_client_handle_t handle;
         evt_user_data_t user_data;
+        EventGroupHandle_t event_group;
     } ws_client;
     QueueHandle_t event_queue;
 };
@@ -83,7 +83,7 @@ static esp_err_t confirm_ws_session(esp_spotify_client_handle_t client, char *co
 static void free_track(TrackInfo *track_info);
 static esp_err_t http_retries_available(esp_spotify_client_handle_t client, esp_err_t err);
 static void debug_mem();
-static bool access_token_empty();
+static bool access_token_empty(esp_spotify_client_handle_t client);
 static void prepare_client(esp_http_client_handle_t http_client, const char *auth, const char *content_type, const char *url, esp_http_client_method_t method);
 static esp_err_t player_cmd(esp_spotify_client_handle_t client, PlayerCommand_t cmd, void *payload, HttpStatus_Code *status_code);
 
@@ -179,13 +179,13 @@ esp_spotify_client_handle_t spotify_client_init(UBaseType_t priority)
         return NULL;
     }
 
-    if (!(client->event_group = xEventGroupCreate()))
+    if (!(client->ws_client.event_group = xEventGroupCreate()))
     {
         ESP_LOGE("EventGroup", "Failed to create event group");
         spotify_client_deinit(client);
         return NULL;
     }
-    client->ws_client.user_data.ctx = client->event_group;
+    client->ws_client.user_data.ctx = client->ws_client.event_group;
 
     int res = xTaskCreate(player_task, "player_task", 4096, client, priority, NULL);
     if (!res)
@@ -198,6 +198,7 @@ esp_spotify_client_handle_t spotify_client_init(UBaseType_t priority)
     return client;
 }
 
+// TODO: make sure to set client to NULL
 esp_err_t spotify_client_deinit(esp_spotify_client_handle_t client)
 {
     if (!client)
@@ -240,10 +241,10 @@ esp_err_t spotify_client_deinit(esp_spotify_client_handle_t client)
         vQueueDelete(client->event_queue);
         client->event_queue = NULL;
     }
-    if (client->event_group)
+    if (client->ws_client.event_group)
     {
-        vEventGroupDelete(client->event_group);
-        client->event_group = NULL;
+        vEventGroupDelete(client->ws_client.event_group);
+        client->ws_client.event_group = NULL;
     }
     free(client);
     return ESP_OK;
@@ -251,7 +252,7 @@ esp_err_t spotify_client_deinit(esp_spotify_client_handle_t client)
 
 esp_err_t player_dispatch_event(esp_spotify_client_handle_t client, SendEvent_t event)
 {
-    if (!client->event_group)
+    if (!client->ws_client.event_group)
     {
         ESP_LOGE(TAG, "Run spotify_client_init() first");
         return ESP_FAIL;
@@ -259,28 +260,28 @@ esp_err_t player_dispatch_event(esp_spotify_client_handle_t client, SendEvent_t 
     switch (event)
     {
     case ENABLE_PLAYER_EVENT:
-        xEventGroupSetBits(client->event_group, ENABLE_PLAYER);
+        xEventGroupSetBits(client->ws_client.event_group, ENABLE_PLAYER);
         break;
     case DISABLE_PLAYER_EVENT:
-        xEventGroupSetBits(client->event_group, DISABLE_PLAYER);
+        xEventGroupSetBits(client->ws_client.event_group, DISABLE_PLAYER);
         break;
     case DATA_PROCESSED_EVENT:
-        xEventGroupSetBits(client->event_group, WS_DATA_CONSUMED);
+        xEventGroupSetBits(client->ws_client.event_group, WS_DATA_CONSUMED);
         break;
     case DO_PLAY_EVENT:
-        xEventGroupSetBits(client->event_group, DO_PLAY);
+        xEventGroupSetBits(client->ws_client.event_group, DO_PLAY);
         break;
     case DO_PAUSE_EVENT:
-        xEventGroupSetBits(client->event_group, DO_PAUSE);
+        xEventGroupSetBits(client->ws_client.event_group, DO_PAUSE);
         break;
     case PAUSE_UNPAUSE_EVENT:
-        xEventGroupSetBits(client->event_group, DO_PAUSE_UNPAUSE);
+        xEventGroupSetBits(client->ws_client.event_group, DO_PAUSE_UNPAUSE);
         break;
     case DO_NEXT_EVENT:
-        xEventGroupSetBits(client->event_group, DO_NEXT);
+        xEventGroupSetBits(client->ws_client.event_group, DO_NEXT);
         break;
     case DO_PREVIOUS_EVENT:
-        xEventGroupSetBits(client->event_group, DO_PREVIOUS);
+        xEventGroupSetBits(client->ws_client.event_group, DO_PREVIOUS);
         break;
     default:
         ESP_LOGE(TAG, "Unknown event: %d", event);
@@ -489,7 +490,7 @@ static void player_task(void *pvParameters)
     while (1)
     {
         uxBits = xEventGroupWaitBits(
-            client->event_group,
+            client->ws_client.event_group,
             ENABLE_PLAYER | DISABLE_PLAYER | WS_DATA_EVENT | WS_DISCONNECT_EVENT | WS_DATA_CONSUMED | player_bits,
             pdTRUE,
             pdFALSE,
@@ -569,7 +570,7 @@ static void player_task(void *pvParameters)
             esp_err_t err = esp_websocket_client_start(client->ws_client.handle);
             if (err == ESP_OK)
             {
-                xEventGroupSetBits(client->event_group, WS_READY_FOR_DATA);
+                xEventGroupSetBits(client->ws_client.event_group, WS_READY_FOR_DATA);
             }
             else
             {
@@ -595,7 +596,7 @@ static void player_task(void *pvParameters)
                 assert(conn_id);
                 ESP_LOGD(TAG, "Connection id: '%s'", conn_id);
                 ESP_ERROR_CHECK(confirm_ws_session(client, conn_id));
-                xEventGroupSetBits(client->event_group, WS_READY_FOR_DATA);
+                xEventGroupSetBits(client->ws_client.event_group, WS_READY_FOR_DATA);
             }
             else
             {
@@ -605,7 +606,7 @@ static void player_task(void *pvParameters)
         }
         else if (uxBits & WS_DATA_CONSUMED)
         {
-            xEventGroupSetBits(client->event_group, WS_READY_FOR_DATA);
+            xEventGroupSetBits(client->ws_client.event_group, WS_READY_FOR_DATA);
             // now the ws buff isn't our anymore
         }
     }
