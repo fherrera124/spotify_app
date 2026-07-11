@@ -77,15 +77,15 @@ void app_main(void)
 
     // enable the player and wait for events
     player_dispatch_event(client, ENABLE_PLAYER_EVENT);
-    SpotifyEvent_t event;
+    SpotifyEvent_t spotify_evt;
     TrackInfo      track = { .artists.type = STRING_LIST };
     assert(track.name = calloc(1, 1));
     while (1) {
-        spotify_wait_event(client, &event, portMAX_DELAY);
-        if (event.type == NEW_TRACK) {
+        spotify_wait_event(client, &spotify_evt, portMAX_DELAY);
+        if (spotify_evt.player_event == NEW_TRACK) {
             ESP_LOGI(TAG, "#");
             spotify_clear_track(&track);
-            spotify_clone_track(&track, (TrackInfo*)event.payload);
+            spotify_clone_track(&track, (TrackInfo*)spotify_evt.payload);
             ESP_LOGI(TAG, "Track: \"%s\"", track.name);
             ESP_LOGI(TAG, "Album: \"%s\"", track.album);
             Node* artist_n = track.artists.first;
@@ -98,8 +98,8 @@ void app_main(void)
                     artist_n = artist_n->next;
                 }
             }
-        } else if (event.type == SAME_TRACK) {
-            TrackInfo* track_updated = event.payload;
+        } else if (spotify_evt.player_event == SAME_TRACK) {
+            TrackInfo* track_updated = spotify_evt.payload;
             if (track.isPlaying != track_updated->isPlaying) {
                 track.isPlaying = track_updated->isPlaying;
                 if (track.isPlaying) {

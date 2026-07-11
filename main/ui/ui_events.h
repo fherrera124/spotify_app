@@ -13,6 +13,17 @@ extern "C" {
 void prevFn(lv_event_t * e);
 void pauseUnpauseFn(lv_event_t * e);
 void nextFn(lv_event_t * e);
+void openPlaylistsFn(lv_event_t * e);
+void playlistBackFn(lv_event_t * e);
+void volumeSliderChangedFn(lv_event_t * e);
+void seekSliderChangedFn(lv_event_t * e);
+void openDevicesFn(lv_event_t * e);
+void closeDevicesFn(lv_event_t * e);
+void openSearchFn(lv_event_t * e);
+void searchSubmitFn(lv_event_t * e);
+void searchBackFn(lv_event_t * e);
+void wifiPasswordSubmitFn(lv_event_t * e);
+void wifiPasswordBackFn(lv_event_t * e);
 
 #ifdef __cplusplus
 } /*extern "C"*/

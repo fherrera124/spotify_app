@@ -11,19 +11,64 @@
 // SCREEN: ui_PlayerScreen
 void ui_PlayerScreen_screen_init(void);
 lv_obj_t * ui_PlayerScreen;
-lv_obj_t * ui_MainContainer;
-lv_obj_t * ui_ButtonsContainer;
 void ui_event_PrevBtn(lv_event_t * e);
 lv_obj_t * ui_PrevBtn;
 void ui_event_PauseUnpauseBtn(lv_event_t * e);
 lv_obj_t * ui_PauseUnpauseBtn;
+lv_obj_t * ui_PauseUnpauseIcon;
 void ui_event_NextBtn(lv_event_t * e);
 lv_obj_t * ui_NextBtn;
 void ui_event_ProgressBar(lv_event_t * e);
 lv_obj_t * ui_ProgressBar;
 lv_obj_t * ui_Track;
 lv_obj_t * ui_Artists;
+lv_obj_t * ui_TrackElapsedLabel;
+lv_obj_t * ui_TrackTotalLabel;
 lv_obj_t * ui_CoverImage;
+void ui_event_PlaylistsBtn(lv_event_t * e);
+lv_obj_t * ui_PlaylistsBtn;
+void ui_event_VolumeSlider(lv_event_t * e);
+lv_obj_t * ui_VolumeSlider;
+void ui_event_DeviceBtn(lv_event_t * e);
+lv_obj_t * ui_DeviceBtn;
+void ui_event_DeviceModal(lv_event_t * e);
+lv_obj_t * ui_DeviceModal;
+lv_obj_t * ui_DeviceStatusLabel;
+lv_obj_t * ui_DeviceList;
+void ui_event_SearchBtn(lv_event_t * e);
+lv_obj_t * ui_SearchBtn;
+
+// SCREEN: ui_PlaylistScreen
+void ui_PlaylistScreen_screen_init(void);
+lv_obj_t * ui_PlaylistScreen;
+lv_obj_t * ui_PlaylistTitle;
+void ui_event_PlaylistBackBtn(lv_event_t * e);
+lv_obj_t * ui_PlaylistBackBtn;
+lv_obj_t * ui_PlaylistStatusLabel;
+lv_obj_t * ui_PlaylistList;
+
+// SCREEN: ui_SearchScreen
+void ui_SearchScreen_screen_init(void);
+lv_obj_t * ui_SearchScreen;
+void ui_event_SearchBackBtn(lv_event_t * e);
+lv_obj_t * ui_SearchBackBtn;
+lv_obj_t * ui_SearchInput;
+lv_obj_t * ui_SearchStatusLabel;
+lv_obj_t * ui_SearchResultList;
+void ui_event_SearchKeyboard(lv_event_t * e);
+lv_obj_t * ui_SearchKeyboard;
+
+// SCREEN: ui_WifiScreen
+void ui_WifiScreen_screen_init(void);
+lv_obj_t * ui_WifiScreen;
+lv_obj_t * ui_WifiTitle;
+lv_obj_t * ui_WifiStatusLabel;
+lv_obj_t * ui_WifiList;
+void ui_event_WifiPasswordBackBtn(lv_event_t * e);
+lv_obj_t * ui_WifiPasswordBackBtn;
+lv_obj_t * ui_WifiPasswordInput;
+void ui_event_WifiKeyboard(lv_event_t * e);
+lv_obj_t * ui_WifiKeyboard;
 // CUSTOM VARIABLES
 
 // EVENTS
@@ -35,9 +80,8 @@ lv_obj_t * ui____initial_actions0;
 #if LV_COLOR_DEPTH != 16
     #error "LV_COLOR_DEPTH should be 16bit to match SquareLine Studio's settings"
 #endif
-#if LV_COLOR_16_SWAP !=1
-    #error "LV_COLOR_16_SWAP should be 1 to match SquareLine Studio's settings"
-#endif
+/* LV_COLOR_16_SWAP no longer exists in LVGL9: byte swap is now configured
+ * per-display via LV_COLOR_FORMAT_RGB565_SWAPPED (see esp_bsp.c). */
 
 ///////////////////// ANIMATIONS ////////////////////
 
@@ -73,9 +117,98 @@ void ui_event_ProgressBar(lv_event_t * e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
 
+    if(event_code == LV_EVENT_RELEASED) {
+        seekSliderChangedFn(e);
+    }
+}
+
+void ui_event_PlaylistsBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        openPlaylistsFn(e);
+    }
+}
+
+void ui_event_VolumeSlider(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
     if(event_code == LV_EVENT_VALUE_CHANGED) {
-        int value = *(int *)lv_event_get_param(e);
-        _ui_bar_set_property(ui_ProgressBar, _UI_BAR_PROPERTY_VALUE_WITH_ANIM, value);
+        volumeSliderChangedFn(e);
+    }
+}
+
+void ui_event_PlaylistBackBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        playlistBackFn(e);
+    }
+}
+
+void ui_event_DeviceBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        openDevicesFn(e);
+    }
+}
+
+void ui_event_DeviceModal(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        closeDevicesFn(e);
+    }
+}
+
+void ui_event_SearchBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        openSearchFn(e);
+    }
+}
+
+void ui_event_SearchBackBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        searchBackFn(e);
+    }
+}
+
+void ui_event_SearchKeyboard(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_READY) {
+        searchSubmitFn(e);
+    }
+}
+
+void ui_event_WifiPasswordBackBtn(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_CLICKED) {
+        wifiPasswordBackFn(e);
+    }
+}
+
+void ui_event_WifiKeyboard(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_READY) {
+        wifiPasswordSubmitFn(e);
     }
 }
 
@@ -84,10 +217,17 @@ void ui_event_ProgressBar(lv_event_t * e)
 void ui_init(void)
 {
     lv_disp_t * dispp = lv_disp_get_default();
+    // lv_font_es_14 instead of LV_FONT_DEFAULT (LVGL's ASCII-only built-in)
+    // - the theme default is what every label without an explicit font
+    // inherits, so this fixes Spanish tildes/accents app-wide in one place
+    // (fonts/lv_font_es.h, ANALYSIS.md 1.25).
     lv_theme_t * theme = lv_theme_default_init(dispp, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED),
-                                               true, LV_FONT_DEFAULT);
+                                               true, &lv_font_es_14);
     lv_disp_set_theme(dispp, theme);
     ui_PlayerScreen_screen_init();
+    ui_PlaylistScreen_screen_init();
+    ui_SearchScreen_screen_init();
+    ui_WifiScreen_screen_init();
     ui____initial_actions0 = lv_obj_create(NULL);
     lv_disp_load_scr(ui_PlayerScreen);
 }

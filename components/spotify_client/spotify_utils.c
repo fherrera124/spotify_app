@@ -19,6 +19,8 @@ List* spotify_create_empty_list(NodeType_t type)
         break;
     case DEVICE_LIST:
         break;
+    case TRACK_LIST:
+        break;
     default:
         return NULL;
     }
@@ -76,6 +78,13 @@ void spotify_free_nodes(List* list)
             free(device_item->name);
             free(device_item->id);
             free(device_item);
+            break;
+        case TRACK_LIST:
+            TrackSearchItem_t* track_item = node->data;
+            free(track_item->name);
+            free(track_item->uri);
+            free(track_item->artists);
+            free(track_item);
             break;
         default:
             ESP_LOGE(TAG, "Unknown list type");

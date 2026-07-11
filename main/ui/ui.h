@@ -12,6 +12,7 @@ extern "C" {
 
 #include "lvgl.h"
 
+#include "fonts/lv_font_es.h"
 #include "ui_helpers.h"
 #include "ui_events.h"
 
@@ -19,19 +20,74 @@ extern "C" {
 // SCREEN: ui_PlayerScreen
 void ui_PlayerScreen_screen_init(void);
 extern lv_obj_t * ui_PlayerScreen;
-extern lv_obj_t * ui_MainContainer;
-extern lv_obj_t * ui_ButtonsContainer;
 void ui_event_PrevBtn(lv_event_t * e);
 extern lv_obj_t * ui_PrevBtn;
 void ui_event_PauseUnpauseBtn(lv_event_t * e);
 extern lv_obj_t * ui_PauseUnpauseBtn;
+extern lv_obj_t * ui_PauseUnpauseIcon;
 void ui_event_NextBtn(lv_event_t * e);
 extern lv_obj_t * ui_NextBtn;
 void ui_event_ProgressBar(lv_event_t * e);
 extern lv_obj_t * ui_ProgressBar;
 extern lv_obj_t * ui_Track;
 extern lv_obj_t * ui_Artists;
+extern lv_obj_t * ui_TrackElapsedLabel;
+extern lv_obj_t * ui_TrackTotalLabel;
 extern lv_obj_t * ui_CoverImage;
+void ui_event_PlaylistsBtn(lv_event_t * e);
+extern lv_obj_t * ui_PlaylistsBtn;
+void ui_event_VolumeSlider(lv_event_t * e);
+extern lv_obj_t * ui_VolumeSlider;
+void ui_event_DeviceBtn(lv_event_t * e);
+extern lv_obj_t * ui_DeviceBtn;
+// ui_DeviceModal is a modal overlay (child of ui_PlayerScreen), not a
+// separate SquareLine-style screen - see ui_PlayerScreen.c. Tapping it
+// directly (i.e. outside the panel/list) closes it - see ui_event_DeviceModal.
+void ui_event_DeviceModal(lv_event_t * e);
+extern lv_obj_t * ui_DeviceModal;
+extern lv_obj_t * ui_DeviceStatusLabel;
+extern lv_obj_t * ui_DeviceList;
+// Hand-added: grouped with ui_PlaylistsBtn in the top-right corner (stacked
+// right below it), opens ui_SearchScreen - see ui_PlayerScreen.c and
+// search_screen.c (main/).
+void ui_event_SearchBtn(lv_event_t * e);
+extern lv_obj_t * ui_SearchBtn;
+
+// SCREEN: ui_PlaylistScreen
+void ui_PlaylistScreen_screen_init(void);
+extern lv_obj_t * ui_PlaylistScreen;
+extern lv_obj_t * ui_PlaylistTitle;
+void ui_event_PlaylistBackBtn(lv_event_t * e);
+extern lv_obj_t * ui_PlaylistBackBtn;
+extern lv_obj_t * ui_PlaylistStatusLabel;
+extern lv_obj_t * ui_PlaylistList;
+
+// SCREEN: ui_SearchScreen (hand-written, not SquareLine). Query textarea +
+// on-screen keyboard, swapped for a results list once submitted - see
+// search_screen.c (main/) and ANALYSIS.md 3.7.
+void ui_SearchScreen_screen_init(void);
+extern lv_obj_t * ui_SearchScreen;
+void ui_event_SearchBackBtn(lv_event_t * e);
+extern lv_obj_t * ui_SearchBackBtn;
+extern lv_obj_t * ui_SearchInput;
+extern lv_obj_t * ui_SearchStatusLabel;
+extern lv_obj_t * ui_SearchResultList;
+void ui_event_SearchKeyboard(lv_event_t * e);
+extern lv_obj_t * ui_SearchKeyboard;
+
+// SCREEN: ui_WifiScreen (hand-written, not SquareLine). Shown at boot when
+// there's no working stored Wi-Fi; no "back" to ui_PlayerScreen since
+// network is mandatory - see wifi_screen.c (main/) and ANALYSIS.md 1.24/3.8.
+void ui_WifiScreen_screen_init(void);
+extern lv_obj_t * ui_WifiScreen;
+extern lv_obj_t * ui_WifiTitle;
+extern lv_obj_t * ui_WifiStatusLabel;
+extern lv_obj_t * ui_WifiList;
+void ui_event_WifiPasswordBackBtn(lv_event_t * e);
+extern lv_obj_t * ui_WifiPasswordBackBtn;
+extern lv_obj_t * ui_WifiPasswordInput;
+void ui_event_WifiKeyboard(lv_event_t * e);
+extern lv_obj_t * ui_WifiKeyboard;
 // CUSTOM VARIABLES
 
 // EVENTS

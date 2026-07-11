@@ -4,9 +4,8 @@
 // Project name: SquareLine_Spotify
 
 #include "ui.h"
-#include "spotify_client.h"
-
-extern esp_spotify_client_handle_t client;
+#include "../app_globals.h"
+#include <string.h>
 
 void prevFn(lv_event_t * e)
 {
@@ -21,4 +20,190 @@ void pauseUnpauseFn(lv_event_t * e)
 void nextFn(lv_event_t * e)
 {
 	player_dispatch_event(client, DO_NEXT_EVENT);
+}
+
+// How long to wait after the last drag/value-change before actually sending
+// the volume to Spotify - avoids hammering the API with one PUT per pixel
+// of drag. Runs on the lvgl_port task via an lv_timer.
+#define VOLUME_DEBOUNCE_MS 400
+
+static lv_timer_t *volume_debounce_timer = NULL;
+
+/* Runs once VOLUME_DEBOUNCE_MS has passed with no further drag: hands the
+ * settled value off to volume_task (player_screen.c) via volume_target_queue
+ * so the blocking spotify_set_volume() HTTP call happens off the lvgl_port
+ * task (same reasoning as openPlaylistsFn below). xQueueOverwrite so only
+ * the latest value matters, matching the "only care about where the user
+ * left it" semantics of a debounce. */
+static void volume_commit_timer_cb(lv_timer_t *timer)
+{
+	lv_timer_del(timer);
+	volume_debounce_timer = NULL;
+	int target = lv_slider_get_value(ui_VolumeSlider);
+	xQueueOverwrite(volume_target_queue, &target);
+}
+
+void volumeSliderChangedFn(lv_event_t * e)
+{
+	if (volume_debounce_timer)
+	{
+		lv_timer_reset(volume_debounce_timer);
+	}
+	else
+	{
+		volume_debounce_timer = lv_timer_create(volume_commit_timer_cb, VOLUME_DEBOUNCE_MS, NULL);
+	}
+}
+
+/* Unlike volumeSliderChangedFn, this fires on LV_EVENT_RELEASED (see
+ * ui_event_ProgressBar, ui.c), not on every LV_EVENT_VALUE_CHANGED - no
+ * debounce timer needed, since a release/tap already is the single "user
+ * settled here" moment for a scrubber (a drag doesn't repeatedly fire this,
+ * only the final lift-off does). Same handoff-to-a-dedicated-task reasoning
+ * as volumeSliderChangedFn otherwise: seek_task (player_screen.c) does the
+ * blocking spotify_seek_to_position() call, not this (lvgl_port) task. */
+void seekSliderChangedFn(lv_event_t * e)
+{
+	int target_ms = lv_slider_get_value(ui_ProgressBar);
+	xQueueOverwrite(seek_target_queue, &target_ms);
+}
+
+/* Runs on the lvgl_port task (touch dispatch), which already holds the
+ * LVGL lock while calling this - do NOT call bsp_display_lock() here, only
+ * playlist_task (a genuinely separate task) needs to lock around its LVGL
+ * calls. This just gives instant visual feedback and hands the (blocking)
+ * network fetch off to playlist_task. */
+void openPlaylistsFn(lv_event_t * e)
+{
+	lv_obj_clean(ui_PlaylistList);
+	lv_label_set_text(ui_PlaylistStatusLabel, "Cargando...");
+	lv_obj_clear_flag(ui_PlaylistStatusLabel, LV_OBJ_FLAG_HIDDEN);
+	lv_disp_load_scr(ui_PlaylistScreen);
+	xTaskNotifyGive(playlist_task_handle);
+}
+
+/* Doesn't navigate by itself: pushes a NULL sentinel so playlist_task (which
+ * owns the fetched List's lifetime) is the single place that decides when
+ * it's safe to switch back to ui_PlayerScreen and free the list. */
+void playlistBackFn(lv_event_t * e)
+{
+	char *back_sentinel = NULL;
+	xQueueSend(playlist_selection_queue, &back_sentinel, 0);
+}
+
+/* Unlike openPlaylistsFn, this doesn't navigate to a separate screen - the
+ * device picker is a modal (ui_DeviceModal, child of ui_PlayerScreen, see
+ * ui_PlayerScreen.c), just shown/hidden in place. Same reasoning otherwise:
+ * instant visual feedback here, the blocking spotify_available_devices()
+ * fetch happens on device_task. */
+void openDevicesFn(lv_event_t * e)
+{
+	lv_obj_clean(ui_DeviceList);
+	lv_label_set_text(ui_DeviceStatusLabel, "Cargando...");
+	lv_obj_clear_flag(ui_DeviceStatusLabel, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_clear_flag(ui_DeviceModal, LV_OBJ_FLAG_HIDDEN);
+	xTaskNotifyGive(device_task_handle);
+}
+
+/* Doesn't hide the modal itself - device_task (which owns the fetched
+ * List's lifetime) is the single place that decides when it's safe to do
+ * that, same reasoning as playlistBackFn. */
+void closeDevicesFn(lv_event_t * e)
+{
+	char *back_sentinel = NULL;
+	xQueueSend(device_selection_queue, &back_sentinel, 0);
+}
+
+/* Runs on the lvgl_port task, same reasoning as openPlaylistsFn: instant
+ * visual feedback here, the blocking spotify_search_tracks() fetch happens
+ * on search_task once the user actually submits a query (searchSubmitFn) -
+ * opening the screen alone doesn't touch the network. Resets the screen to
+ * its "not searched yet" state every time it's opened (query box empty,
+ * keyboard up, no stale results/status from a previous visit). */
+void openSearchFn(lv_event_t * e)
+{
+	lv_textarea_set_text(ui_SearchInput, "");
+	lv_obj_clean(ui_SearchResultList);
+	lv_obj_add_flag(ui_SearchResultList, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_add_flag(ui_SearchStatusLabel, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_clear_flag(ui_SearchKeyboard, LV_OBJ_FLAG_HIDDEN);
+	lv_disp_load_scr(ui_SearchScreen);
+}
+
+/* Bound to ui_SearchKeyboard's LV_EVENT_READY (the keyboard's own "OK"/enter
+ * key, see ui_event_SearchKeyboard, ui_SearchScreen.c). Hands the typed text
+ * off to search_task (a strdup'd
+ * copy - the textarea's own buffer isn't guaranteed to outlive this call)
+ * and swaps the keyboard out for the results list/status, same
+ * instant-feedback-here / blocking-call-on-a-task split as every other
+ * network-triggering event in this file. */
+void searchSubmitFn(lv_event_t * e)
+{
+	const char *text = lv_textarea_get_text(ui_SearchInput);
+	if (!text || text[0] == '\0')
+	{
+		return;
+	}
+	char *query = strdup(text);
+	if (!query)
+	{
+		return;
+	}
+	lv_obj_add_flag(ui_SearchKeyboard, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_clean(ui_SearchResultList);
+	lv_obj_clear_flag(ui_SearchResultList, LV_OBJ_FLAG_HIDDEN);
+	lv_label_set_text(ui_SearchStatusLabel, "Buscando...");
+	lv_obj_clear_flag(ui_SearchStatusLabel, LV_OBJ_FLAG_HIDDEN);
+	xQueueSend(search_query_queue, &query, 0);
+}
+
+/* Unlike playlistBackFn/closeDevicesFn, search_task can be blocked on either
+ * of two different queues depending on how far the user got before tapping
+ * back: still typing (never submitted, search_task's first receive is on
+ * search_query_queue) vs. results/status already showing (search_task is
+ * waiting on search_selection_queue for a row tap). ui_SearchKeyboard's
+ * hidden flag is already the source of truth for which phase we're in (see
+ * openSearchFn/searchSubmitFn), so reuse it here instead of tracking a
+ * separate bit of state - whichever queue search_task is actually blocked on
+ * gets the NULL sentinel. */
+void searchBackFn(lv_event_t * e)
+{
+	char *back_sentinel = NULL;
+	if (lv_obj_has_flag(ui_SearchKeyboard, LV_OBJ_FLAG_HIDDEN))
+	{
+		xQueueSend(search_selection_queue, &back_sentinel, 0);
+	}
+	else
+	{
+		xQueueSend(search_query_queue, &back_sentinel, 0);
+	}
+}
+
+/* Bound to ui_WifiKeyboard's LV_EVENT_READY (see ui_event_WifiKeyboard,
+ * ui_WifiScreen.c). Unlike searchSubmitFn, an empty password is still a
+ * valid submission here (some networks are secured with an empty/blank
+ * password field shown, or the user just fat-fingered it) - it'll simply
+ * fail to connect and wifi_screen_run_until_connected() loops back to the
+ * AP list, same as any other wrong password. */
+void wifiPasswordSubmitFn(lv_event_t * e)
+{
+	const char *text = lv_textarea_get_text(ui_WifiPasswordInput);
+	char *password = strdup(text ? text : "");
+	if (!password)
+	{
+		return;
+	}
+	xQueueSend(wifi_password_submit_queue, &password, 0);
+}
+
+/* Cancels back to the AP list without attempting a connection - see the
+ * NULL-sentinel handling in wifi_screen_run_until_connected(). Only ever
+ * relevant while the password sub-view is showing (there's no equivalent
+ * "back before submitting" ambiguity like searchBackFn's, since picking an
+ * AP off the list is a separate queue/callback - wifi_ap_clicked_cb,
+ * wifi_screen.c - not this one). */
+void wifiPasswordBackFn(lv_event_t * e)
+{
+	char *cancel_sentinel = NULL;
+	xQueueSend(wifi_password_submit_queue, &cancel_sentinel, 0);
 }

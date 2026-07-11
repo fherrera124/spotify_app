@@ -1,3 +1,8 @@
 dependencies:
-  idf: '>=4.4'
+  idf: '>=6.0.0'
   esp_jpeg: '>=1.0.2'
+  lvgl/lvgl: "^9.1.0"
+
+  bsp_jc3248w535:
+    git: "https://github.com/fherrera124/JC3248W535.git"
+    path: "components/bsp_jc3248w535"

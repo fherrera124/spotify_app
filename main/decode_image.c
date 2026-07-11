@@ -29,7 +29,7 @@ const char *TAG = "ImageDec";
 #define JPEG_WORK_BUF_SIZE  3100
 
 //Decode the embedded image into pixel lines that can be used with the rest of the logic.
-esp_err_t decode_image(uint16_t *pixels, const uint8_t *image_jpg, uint32_t image_jpg_size, size_t image_w, size_t image_h, esp_jpeg_image_scale_t scale)
+esp_err_t decode_image(uint16_t *pixels, const uint8_t *image_jpg, uint32_t image_jpg_size, size_t image_w, size_t image_h, esp_jpeg_image_scale_t scale, uint16_t *out_width, uint16_t *out_height)
 {
     esp_err_t ret = ESP_OK;
 
@@ -64,10 +64,17 @@ esp_err_t decode_image(uint16_t *pixels, const uint8_t *image_jpg, uint32_t imag
 
     //JPEG decode
     esp_jpeg_image_output_t outimg;
-    esp_jpeg_decode(&jpeg_cfg, &outimg);
+    ret = esp_jpeg_decode(&jpeg_cfg, &outimg);
+    free(workbuf);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "esp_jpeg_decode failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     ESP_LOGD(TAG, "JPEG image decoded! Size of the decoded image is: %dpx x %dpx", outimg.width, outimg.height);
-    free(workbuf);
+    *out_width = outimg.width;
+    *out_height = outimg.height;
     return ret;
 /* err:
     //Something went wrong! Exit cleanly, de-allocating everything we allocated.

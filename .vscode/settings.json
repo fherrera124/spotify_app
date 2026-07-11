@@ -43,5 +43,7 @@
         "handler_callbacks.h": "c",
         "esp_websocket_client.h": "c",
         "freertos.h": "c"
-    }
+    },
+    "idf.currentSetup": "/home/user/.espressif/v6.0.1/esp-idf",
+    "idf.port": "/dev/ttyUSB0"
 }

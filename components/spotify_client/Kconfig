@@ -5,6 +5,13 @@ menu "Spotify Client Configuration"
         default ""
         help
         	The token associated to your Discord account. TODO: add steps to obtain it.
+        	WARNING: this is a full-privilege Discord user token, used against
+        	an undocumented internal Discord endpoint to obtain a Spotify
+        	access token. This is a deliberate trade-off (see
+        	components/spotify_client/ANALYSIS.md, item 1.8): it is the only
+        	practical way found so far to also get access to Spotify's
+        	private real-time WebSocket. A leaked token exposes your full
+        	Discord account, not just Spotify.
         	
     config SPOTIFY_UID
         string "Spotify UID"
